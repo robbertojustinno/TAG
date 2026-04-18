@@ -1,7 +1,7 @@
 window.TAGCHECK_VIEWER_CONFIG = {
   APP_VERSION: '2.0.0',
   APP_NAME: 'TagCheck Viewer',
-  API_BASE_URL: 'https://tag-pro.onrender.com',
+  API_BASE_URL: 'https://tag-1-xfzk.onrender.com',
   REQUEST_TIMEOUT_MS: 12000,
   ENABLE_DEBUG: false,
   ENDPOINTS: {
