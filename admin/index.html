@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TagCheck Admin</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar card">
+      <div class="brand">
+        <img src="./public/logo.png" alt="Just Engine" class="brand-logo" />
+        <div>
+          <h1 id="brandTitle">TagCheck • Smart Asset Tracking</h1>
+          <p id="brandSubtitle">Powered by Just Engine™ ⚡</p>
+        </div>
+      </div>
+
+      <div class="topbar-actions">
+        <button id="langPt" class="secondary-button lang-button active">PT</button>
+        <button id="langEn" class="outline-button lang-button">EN</button>
+        <a id="openViewerButton" class="secondary-button" href="#" target="_blank" rel="noopener noreferrer">Viewer</a>
+      </div>
+    </header>
+
+    <main class="app-main" id="app">
+      <section class="screen">
+        <div class="card panel">
+          <div class="center-row">
+            <div class="loader"></div>
+            <span>Carregando Admin...</span>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
+  <script src="./config.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
