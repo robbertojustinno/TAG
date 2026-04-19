@@ -20,7 +20,7 @@ Base = declarative_base()
 
 
 class Equipment(Base):
-    __tablename__ = "equipment"
+    __tablename__ = "tagcheck_equipment"
 
     id = Column(Integer, primary_key=True, index=True)
     tag = Column(String, unique=True, index=True, nullable=False)
