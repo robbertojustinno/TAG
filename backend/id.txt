@@ -1,0 +1,5 @@
+CLOUDINARY_URL= dhrphkobr
+API Key: 186678565145243
+API Secret: A7UbuaOfZULDxpLmTdaL-ePQ8hc
+
+postgresql://amigopet_user:HsC9KqglK7GZfNcIC62MyfbMZMC44e2T@dpg-d7h0o5bbc2fs738n7be0-a.oregon-postgres.render.com/amigopet
