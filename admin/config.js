@@ -1,5 +1,5 @@
 window.TAGCHECK_ADMIN_CONFIG = {
-  APP_VERSION: '1.0.1',
+  APP_VERSION: '2.0.0',
   APP_NAME: 'TagCheck Admin',
   API_BASE_URL: 'https://tag-1-xfzk.onrender.com',
   VIEWER_BASE_URL: 'https://tag-viewer.onrender.com/',
