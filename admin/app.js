@@ -6,8 +6,8 @@ const I18N = {
   pt: {
     brandTitle: 'TagCheck • Smart Asset Tracking',
     brandSubtitle: 'Powered by Just Engine™ ⚡',
-    heroTitle: 'Admin novo V1',
-    heroText: 'Cadastro e consulta de equipamentos usando o backend novo online.',
+    heroTitle: 'Admin V2',
+    heroText: 'Cadastro, consulta e gestão de equipamentos com visual profissional.',
     apiOk: 'API online',
     apiFail: 'API indisponível',
     version: 'Versão',
@@ -25,6 +25,8 @@ const I18N = {
     tag: 'TAG',
     name: 'Nome',
     photo: 'Foto',
+    choosePhoto: 'Escolher foto',
+    changePhoto: 'Trocar foto',
     noImage: 'Sem foto',
     qr: 'QR',
     actions: 'Ações',
@@ -35,7 +37,7 @@ const I18N = {
     loading: 'Carregando Admin...',
     listLoading: 'Carregando equipamentos...',
     noItems: 'Nenhum equipamento cadastrado ainda.',
-    typeTag: 'Digite uma TAG válida.',
+    typeTag: 'Digite TAG, nome e selecione uma foto.',
     createSuccess: 'Equipamento cadastrado com sucesso.',
     createError: 'Falha ao cadastrar equipamento.',
     listError: 'Falha ao carregar a lista.',
@@ -44,19 +46,25 @@ const I18N = {
     viewer: 'Viewer',
     edit: 'Editar',
     delete: 'Excluir',
-    editTagPrompt: 'Nova TAG:',
-    editNamePrompt: 'Novo nome:',
-    deleteConfirm: 'Excluir item?',
+    save: 'Salvar',
+    cancel: 'Cancelar',
+    editMode: 'Modo de edição',
     updateSuccess: 'Equipamento atualizado com sucesso.',
     updateError: 'Falha ao atualizar equipamento.',
+    deleteConfirmTitle: 'Confirmar exclusão',
+    deleteConfirmText: 'Deseja excluir este equipamento?',
     deleteSuccess: 'Equipamento excluído com sucesso.',
-    deleteError: 'Falha ao excluir equipamento.'
+    deleteError: 'Falha ao excluir equipamento.',
+    preview: 'Pré-visualização',
+    selectedPhoto: 'Foto selecionada',
+    clearPhoto: 'Limpar foto',
+    searchResult: 'Resultado da busca'
   },
   en: {
     brandTitle: 'TagCheck • Smart Asset Tracking',
     brandSubtitle: 'Powered by Just Engine™ ⚡',
-    heroTitle: 'New Admin V1',
-    heroText: 'Equipment registration and lookup using the new online backend.',
+    heroTitle: 'Admin V2',
+    heroText: 'Equipment registration, lookup and management with a professional UI.',
     apiOk: 'API online',
     apiFail: 'API unavailable',
     version: 'Version',
@@ -74,6 +82,8 @@ const I18N = {
     tag: 'TAG',
     name: 'Name',
     photo: 'Photo',
+    choosePhoto: 'Choose photo',
+    changePhoto: 'Change photo',
     noImage: 'No image',
     qr: 'QR',
     actions: 'Actions',
@@ -84,7 +94,7 @@ const I18N = {
     loading: 'Loading Admin...',
     listLoading: 'Loading equipment...',
     noItems: 'No equipment registered yet.',
-    typeTag: 'Enter a valid TAG.',
+    typeTag: 'Enter TAG, name and select a photo.',
     createSuccess: 'Equipment created successfully.',
     createError: 'Failed to create equipment.',
     listError: 'Failed to load list.',
@@ -93,20 +103,30 @@ const I18N = {
     viewer: 'Viewer',
     edit: 'Edit',
     delete: 'Delete',
-    editTagPrompt: 'New TAG:',
-    editNamePrompt: 'New name:',
-    deleteConfirm: 'Delete item?',
+    save: 'Save',
+    cancel: 'Cancel',
+    editMode: 'Edit mode',
     updateSuccess: 'Equipment updated successfully.',
     updateError: 'Failed to update equipment.',
+    deleteConfirmTitle: 'Confirm deletion',
+    deleteConfirmText: 'Do you want to delete this equipment?',
     deleteSuccess: 'Equipment deleted successfully.',
-    deleteError: 'Failed to delete equipment.'
+    deleteError: 'Failed to delete equipment.',
+    preview: 'Preview',
+    selectedPhoto: 'Selected photo',
+    clearPhoto: 'Clear photo',
+    searchResult: 'Search result'
   }
 };
 
 const state = {
   language: localStorage.getItem(CONFIG.STORAGE_KEYS.language) || 'pt',
   items: [],
-  apiReachable: null
+  apiReachable: null,
+  createPreviewUrl: '',
+  editingId: null,
+  editDraft: null,
+  deleteTargetId: null
 };
 
 function t(key) {
@@ -123,11 +143,9 @@ function setLanguage(lang) {
 function syncHeaderLanguage() {
   document.getElementById('brandTitle').textContent = t('brandTitle');
   document.getElementById('brandSubtitle').textContent = t('brandSubtitle');
-  document.getElementById('langPt').classList.toggle('active', state.language === 'pt');
   document.getElementById('langPt').className = state.language === 'pt'
     ? 'secondary-button lang-button active'
     : 'outline-button lang-button';
-  document.getElementById('langEn').classList.toggle('active', state.language === 'en');
   document.getElementById('langEn').className = state.language === 'en'
     ? 'secondary-button lang-button active'
     : 'outline-button lang-button';
@@ -281,8 +299,68 @@ function photoHtml(item) {
   if (!item.photo) {
     return `<div class="thumb-fallback">${t('noImage')}</div>`;
   }
-
   return `<img class="thumb" src="${escapeHtml(item.photo)}" alt="${escapeHtml(item.name)}" />`;
+}
+
+function getItemById(id) {
+  return state.items.find((item) => item.id === id) || null;
+}
+
+function createPreviewBlock() {
+  if (!state.createPreviewUrl) {
+    return `
+      <div class="image-upload-box empty">
+        <div class="image-upload-placeholder">${t('preview')}</div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="image-upload-box">
+      <img class="image-preview" src="${escapeHtml(state.createPreviewUrl)}" alt="${t('selectedPhoto')}" />
+    </div>
+    <div class="inline-actions">
+      <button type="button" id="clearCreatePhoto" class="outline-button">${t('clearPhoto')}</button>
+    </div>
+  `;
+}
+
+function searchResultHtml() {
+  return `
+    <div id="searchFeedback"></div>
+  `;
+}
+
+function renderEditableRow(item) {
+  const draft = state.editDraft || { tag: item.tag, name: item.name, photoFile: null, previewUrl: item.photo || '' };
+
+  return `
+    <tr class="edit-row">
+      <td class="code-soft">${escapeHtml(item.id)}</td>
+      <td>
+        <input id="editTagInput" class="input table-input" value="${escapeHtml(draft.tag)}" />
+      </td>
+      <td>
+        <input id="editNameInput" class="input table-input" value="${escapeHtml(draft.name)}" />
+      </td>
+      <td>
+        <div class="edit-photo-stack">
+          ${draft.previewUrl
+            ? `<img class="thumb thumb-large" src="${escapeHtml(draft.previewUrl)}" alt="${escapeHtml(draft.name)}" />`
+            : `<div class="thumb-fallback thumb-large">${t('noImage')}</div>`}
+          <input id="editPhotoInput" class="file-input compact-file" type="file" accept="image/*" />
+        </div>
+      </td>
+      <td>${statusPill(item.status)}</td>
+      <td>${qrHtml(item.tag)}</td>
+      <td>
+        <div class="inline-actions">
+          <button class="primary-button" id="saveEditButton">${t('save')}</button>
+          <button class="outline-button" id="cancelEditButton">${t('cancel')}</button>
+        </div>
+      </td>
+    </tr>
+  `;
 }
 
 function renderRows(items) {
@@ -296,22 +374,49 @@ function renderRows(items) {
     `;
   }
 
-  return items.map((item) => `
-    <tr>
-      <td class="code-soft">${escapeHtml(item.id)}</td>
-      <td><strong>${escapeHtml(item.tag)}</strong></td>
-      <td>${escapeHtml(item.name)}</td>
-      <td>${photoHtml(item)}</td>
-      <td>${statusPill(item.status)}</td>
-      <td>${qrHtml(item.tag)}</td>
-      <td>
-        <div class="inline-actions">
-          <button class="secondary-button" onclick="editItem(${item.id})">${t('edit')}</button>
-          <button class="danger-button" onclick="deleteItem(${item.id})">${t('delete')}</button>
-        </div>
-      </td>
-    </tr>
-  `).join('');
+  return items.map((item) => {
+    if (state.editingId === item.id) {
+      return renderEditableRow(item);
+    }
+
+    return `
+      <tr>
+        <td class="code-soft">${escapeHtml(item.id)}</td>
+        <td><strong>${escapeHtml(item.tag)}</strong></td>
+        <td>${escapeHtml(item.name)}</td>
+        <td>${photoHtml(item)}</td>
+        <td>${statusPill(item.status)}</td>
+        <td>${qrHtml(item.tag)}</td>
+        <td>
+          <div class="inline-actions">
+            <button class="secondary-button" onclick="startEditItem(${item.id})">${t('edit')}</button>
+            <button class="danger-button" onclick="askDeleteItem(${item.id})">${t('delete')}</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function renderDeleteConfirm() {
+  if (!state.deleteTargetId) return '';
+
+  const item = getItemById(state.deleteTargetId);
+  if (!item) return '';
+
+  return `
+    <div class="card panel danger-panel">
+      <h3>${t('deleteConfirmTitle')}</h3>
+      <div class="notice error">
+        ${t('deleteConfirmText')}<br>
+        <strong>${escapeHtml(item.tag)} • ${escapeHtml(item.name)}</strong>
+      </div>
+      <div class="inline-actions">
+        <button class="danger-button" id="confirmDeleteButton">${t('delete')}</button>
+        <button class="outline-button" id="cancelDeleteButton">${t('cancel')}</button>
+      </div>
+    </div>
+  `;
 }
 
 function renderApp(notice = '') {
@@ -333,6 +438,7 @@ function renderApp(notice = '') {
         <div class="badge-row">
           <span class="badge">${t('version')} ${escapeHtml(CONFIG.APP_VERSION)}</span>
           ${apiBadge}
+          ${state.editingId ? `<span class="badge">${t('editMode')}</span>` : ''}
         </div>
 
         <div class="grid-3">
@@ -357,6 +463,7 @@ function renderApp(notice = '') {
           <input id="tagInput" class="input" placeholder="${t('tag')}" />
           <input id="nameInput" class="input" placeholder="${t('name')}" />
           <input id="photoInput" class="file-input" type="file" accept="image/*" />
+          ${createPreviewBlock()}
           <div class="inline-actions">
             <button id="createButton" class="primary-button">${t('create')}</button>
           </div>
@@ -370,9 +477,11 @@ function renderApp(notice = '') {
             <button id="searchButton" class="secondary-button">${t('searchButton')}</button>
             <button id="refreshButton" class="outline-button">${t('refresh')}</button>
           </div>
-          <div id="searchFeedback"></div>
+          ${searchResultHtml()}
         </div>
       </div>
+
+      ${renderDeleteConfirm()}
 
       <div class="card panel">
         <h3>${t('listTitle')}</h3>
@@ -396,7 +505,7 @@ function renderApp(notice = '') {
         </div>
       </div>
 
-      <div class="footer-note">Admin novo V1 • backend único • pronto para evoluir</div>
+      <div class="footer-note">Admin V2 • backend único • UX profissional</div>
     </section>
   `;
 
@@ -405,6 +514,24 @@ function renderApp(notice = '') {
 }
 
 function bindEvents() {
+  document.getElementById('photoInput')?.addEventListener('change', (event) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      state.createPreviewUrl = '';
+      renderApp();
+      return;
+    }
+    state.createPreviewUrl = URL.createObjectURL(file);
+    renderApp();
+  });
+
+  document.getElementById('clearCreatePhoto')?.addEventListener('click', () => {
+    state.createPreviewUrl = '';
+    const input = document.getElementById('photoInput');
+    if (input) input.value = '';
+    renderApp();
+  });
+
   document.getElementById('createButton')?.addEventListener('click', async () => {
     const tag = document.getElementById('tagInput').value.trim();
     const name = document.getElementById('nameInput').value.trim();
@@ -425,6 +552,7 @@ function bindEvents() {
 
     try {
       await createEquipment(formData);
+      state.createPreviewUrl = '';
       await loadItems();
       renderApp(`<div class="notice success">${t('createSuccess')}</div>`);
     } catch (error) {
@@ -441,10 +569,21 @@ function bindEvents() {
     try {
       const item = await searchByTag(tag);
       feedback.innerHTML = `
-        <div class="notice success">
-          <strong>${escapeHtml(item.name)}</strong><br>
-          TAG: ${escapeHtml(item.tag)}<br>
-          ${item.photo ? `<a href="${escapeHtml(item.photo)}" target="_blank" rel="noopener noreferrer">${t('photo')}</a>` : t('noImage')}
+        <div class="search-result-card">
+          <div class="search-result-media">
+            ${item.photo
+              ? `<img class="search-result-thumb" src="${escapeHtml(item.photo)}" alt="${escapeHtml(item.name)}" />`
+              : `<div class="thumb-fallback thumb-large">${t('noImage')}</div>`}
+          </div>
+          <div class="search-result-body">
+            <div class="search-result-label">${t('searchResult')}</div>
+            <strong>${escapeHtml(item.name)}</strong>
+            <div class="muted">TAG: ${escapeHtml(item.tag)}</div>
+            <div class="inline-actions">
+              <a class="secondary-button" href="${viewerUrlForTag(item.tag)}" target="_blank" rel="noopener noreferrer">${t('openViewer')}</a>
+              ${item.photo ? `<a class="outline-button" href="${escapeHtml(item.photo)}" target="_blank" rel="noopener noreferrer">${t('photo')}</a>` : ''}
+            </div>
+          </div>
         </div>
       `;
     } catch (error) {
@@ -463,6 +602,62 @@ function bindEvents() {
       feedback.innerHTML = `<div class="notice error">${escapeHtml(error.message || t('listError'))}</div>`;
     }
   });
+
+  document.getElementById('editPhotoInput')?.addEventListener('change', (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    state.editDraft = {
+      ...state.editDraft,
+      photoFile: file,
+      previewUrl: URL.createObjectURL(file)
+    };
+    renderApp();
+  });
+
+  document.getElementById('saveEditButton')?.addEventListener('click', async () => {
+    if (!state.editingId || !state.editDraft) return;
+
+    const form = new FormData();
+    form.append('tag', normalizeText(document.getElementById('editTagInput')?.value));
+    form.append('name', normalizeText(document.getElementById('editNameInput')?.value));
+    if (state.editDraft.photoFile) {
+      form.append('photo', state.editDraft.photoFile);
+    }
+
+    try {
+      await updateEquipment(state.editingId, form);
+      state.editingId = null;
+      state.editDraft = null;
+      await loadItems();
+      renderApp(`<div class="notice success">${t('updateSuccess')}</div>`);
+    } catch (error) {
+      renderApp(`<div class="notice error">${escapeHtml(error.message || t('updateError'))}</div>`);
+    }
+  });
+
+  document.getElementById('cancelEditButton')?.addEventListener('click', () => {
+    state.editingId = null;
+    state.editDraft = null;
+    renderApp();
+  });
+
+  document.getElementById('confirmDeleteButton')?.addEventListener('click', async () => {
+    if (!state.deleteTargetId) return;
+
+    try {
+      await deleteEquipment(state.deleteTargetId);
+      state.deleteTargetId = null;
+      await loadItems();
+      renderApp(`<div class="notice success">${t('deleteSuccess')}</div>`);
+    } catch (error) {
+      renderApp(`<div class="notice error">${escapeHtml(error.message || t('deleteError'))}</div>`);
+    }
+  });
+
+  document.getElementById('cancelDeleteButton')?.addEventListener('click', () => {
+    state.deleteTargetId = null;
+    renderApp();
+  });
 }
 
 function renderQRCodes() {
@@ -478,36 +673,26 @@ function renderQRCodes() {
   });
 }
 
-window.deleteItem = async function(id) {
-  if (!confirm(t('deleteConfirm'))) return;
+window.startEditItem = function(id) {
+  const item = getItemById(id);
+  if (!item) return;
 
-  try {
-    await deleteEquipment(id);
-    await loadItems();
-    renderApp(`<div class="notice success">${t('deleteSuccess')}</div>`);
-  } catch (error) {
-    renderApp(`<div class="notice error">${escapeHtml(error.message || t('deleteError'))}</div>`);
-  }
+  state.editingId = id;
+  state.deleteTargetId = null;
+  state.editDraft = {
+    tag: item.tag,
+    name: item.name,
+    photoFile: null,
+    previewUrl: item.photo || ''
+  };
+  renderApp();
 };
 
-window.editItem = async function(id) {
-  const current = state.items.find((item) => item.id === id);
-  const tag = prompt(t('editTagPrompt'), current?.tag || '');
-  const name = prompt(t('editNamePrompt'), current?.name || '');
-
-  if (!tag || !name) return;
-
-  const form = new FormData();
-  form.append('tag', tag);
-  form.append('name', name);
-
-  try {
-    await updateEquipment(id, form);
-    await loadItems();
-    renderApp(`<div class="notice success">${t('updateSuccess')}</div>`);
-  } catch (error) {
-    renderApp(`<div class="notice error">${escapeHtml(error.message || t('updateError'))}</div>`);
-  }
+window.askDeleteItem = function(id) {
+  state.deleteTargetId = id;
+  state.editingId = null;
+  state.editDraft = null;
+  renderApp();
 };
 
 async function boot() {
