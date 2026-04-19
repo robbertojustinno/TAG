@@ -3,28 +3,30 @@ from fastapi.middleware.cors import CORSMiddleware
 import cloudinary
 import cloudinary.uploader
 import os
+
 from sqlalchemy import create_engine, Column, Integer, String
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-# DB CONFIG
 DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL não configurada")
 
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(bind=engine)
+engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 Base = declarative_base()
 
-# MODEL
+
 class Equipment(Base):
     __tablename__ = "equipment"
 
     id = Column(Integer, primary_key=True, index=True)
-    tag = Column(String, unique=True)
-    name = Column(String)
-    photo = Column(String)
+    tag = Column(String, unique=True, index=True, nullable=False)
+    name = Column(String, nullable=False)
+    photo = Column(String, nullable=False)
+
 
 Base.metadata.create_all(bind=engine)
 
-# APP
 app = FastAPI()
 
 app.add_middleware(
@@ -35,16 +37,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# CLOUDINARY
 cloudinary.config(
     cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
     api_key=os.getenv("CLOUDINARY_API_KEY"),
     api_secret=os.getenv("CLOUDINARY_API_SECRET"),
 )
 
+
 @app.get("/")
 def root():
+    return {"ok": True, "message": "TagCheck backend online"}
+
+
+@app.get("/health")
+def health():
     return {"ok": True}
+
 
 @app.post("/equipment")
 async def create_equipment(
@@ -52,23 +60,33 @@ async def create_equipment(
     name: str = Form(...),
     photo: UploadFile = File(...)
 ):
-    db = SessionLocal()
+    if not tag.strip():
+        raise HTTPException(status_code=400, detail="TAG é obrigatória.")
+    if not name.strip():
+        raise HTTPException(status_code=400, detail="Nome é obrigatório.")
+    if not photo or not photo.filename:
+        raise HTTPException(status_code=400, detail="Foto é obrigatória.")
 
+    db = SessionLocal()
     try:
-        # upload imagem
+        existing = db.query(Equipment).filter(Equipment.tag == tag.strip()).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="TAG já cadastrada.")
+
         result = cloudinary.uploader.upload(
             photo.file,
-            folder="tagcheck/equipments"
+            folder="tagcheck/equipments",
+            resource_type="image",
         )
         image_url = result.get("secure_url")
+        if not image_url:
+            raise HTTPException(status_code=500, detail="Falha ao obter URL da imagem.")
 
-        # salvar no banco
         item = Equipment(
             tag=tag.strip(),
             name=name.strip(),
-            photo=image_url
+            photo=image_url,
         )
-
         db.add(item)
         db.commit()
         db.refresh(item)
@@ -77,44 +95,48 @@ async def create_equipment(
             "id": item.id,
             "tag": item.tag,
             "name": item.name,
-            "photo": item.photo
+            "photo": item.photo,
         }
-
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-
+        raise HTTPException(status_code=500, detail=f"Erro ao salvar equipamento: {str(e)}")
     finally:
         db.close()
+
 
 @app.get("/equipment")
 def list_equipment():
     db = SessionLocal()
-    items = db.query(Equipment).all()
-    db.close()
+    try:
+        items = db.query(Equipment).order_by(Equipment.id.desc()).all()
+        return [
+            {
+                "id": i.id,
+                "tag": i.tag,
+                "name": i.name,
+                "photo": i.photo,
+            }
+            for i in items
+        ]
+    finally:
+        db.close()
 
-    return [
-        {
-            "id": i.id,
-            "tag": i.tag,
-            "name": i.name,
-            "photo": i.photo
-        }
-        for i in items
-    ]
 
 @app.get("/equipment/tag/{tag}")
 def get_by_tag(tag: str):
     db = SessionLocal()
-    item = db.query(Equipment).filter(Equipment.tag == tag).first()
-    db.close()
-
-    if not item:
-        raise HTTPException(status_code=404, detail="Equipamento não encontrado")
-
-    return {
-        "id": item.id,
-        "tag": item.tag,
-        "name": item.name,
-        "photo": item.photo
-    }
+    try:
+        item = db.query(Equipment).filter(Equipment.tag == tag.strip()).first()
+        if not item:
+            raise HTTPException(status_code=404, detail="Equipamento não encontrado.")
+        return {
+            "id": item.id,
+            "tag": item.tag,
+            "name": item.name,
+            "photo": item.photo,
+        }
+    finally:
+        db.close()
