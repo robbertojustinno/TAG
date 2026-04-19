@@ -11,7 +11,10 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
     raise RuntimeError("DATABASE_URL não configurada")
 
-engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+engine = create_engine(DATABASE_URL, pool_pre_ping=True, future=True)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 Base = declarative_base()
 
@@ -129,7 +132,8 @@ def list_equipment():
 def get_by_tag(tag: str):
     db = SessionLocal()
     try:
-        item = db.query(Equipment).filter(Equipment.tag == tag.strip()).first()
+        clean_tag = tag.strip()
+        item = db.query(Equipment).filter(Equipment.tag == clean_tag).first()
         if not item:
             raise HTTPException(status_code=404, detail="Equipamento não encontrado.")
         return {
@@ -138,5 +142,9 @@ def get_by_tag(tag: str):
             "name": item.name,
             "photo": item.photo,
         }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao buscar TAG: {str(e)}")
     finally:
         db.close()
