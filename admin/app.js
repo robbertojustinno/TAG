@@ -7,8 +7,8 @@ const I18N = {
   pt: {
     brandTitle: 'TagCheck • Smart Asset Tracking',
     brandSubtitle: 'Powered by Just Engine™ ⚡',
-    heroTitle: 'Admin V2',
-    heroText: 'Cadastro, consulta e gestão de equipamentos com visual profissional.',
+    heroTitle: 'Admin V3',
+    heroText: 'Cadastro, consulta e gestão completa de equipamentos e instrumentos.',
     apiOk: 'API online',
     apiFail: 'API indisponível',
     version: 'Versão',
@@ -66,13 +66,24 @@ const I18N = {
     preview: 'Pré-visualização',
     selectedPhoto: 'Foto selecionada',
     clearPhoto: 'Limpar foto',
-    searchResult: 'Resultado da busca'
+    searchResult: 'Resultado da busca',
+    equipmentType: 'Tipo',
+    sector: 'Setor',
+    location: 'Localização',
+    manufacturer: 'Fabricante',
+    model: 'Modelo',
+    serialNumber: 'Nº de série',
+    calibrationDue: 'Calibração',
+    notes: 'Observações',
+    chooseStatus: 'Status',
+    placeholderStatus: 'Ativo',
+    authRequired: 'Faça login para continuar.'
   },
   en: {
     brandTitle: 'TagCheck • Smart Asset Tracking',
     brandSubtitle: 'Powered by Just Engine™ ⚡',
-    heroTitle: 'Admin V2',
-    heroText: 'Equipment registration, lookup and management with a professional UI.',
+    heroTitle: 'Admin V3',
+    heroText: 'Complete registration, lookup and management for equipment and instruments.',
     apiOk: 'API online',
     apiFail: 'API unavailable',
     version: 'Version',
@@ -130,7 +141,18 @@ const I18N = {
     preview: 'Preview',
     selectedPhoto: 'Selected photo',
     clearPhoto: 'Clear photo',
-    searchResult: 'Search result'
+    searchResult: 'Search result',
+    equipmentType: 'Type',
+    sector: 'Sector',
+    location: 'Location',
+    manufacturer: 'Manufacturer',
+    model: 'Model',
+    serialNumber: 'Serial number',
+    calibrationDue: 'Calibration',
+    notes: 'Notes',
+    chooseStatus: 'Status',
+    placeholderStatus: 'Active',
+    authRequired: 'Sign in to continue.'
   }
 };
 
@@ -141,6 +163,19 @@ const state = {
   items: [],
   apiReachable: null,
   createPreviewUrl: '',
+  createForm: {
+    tag: '',
+    name: '',
+    equipment_type: '',
+    sector: '',
+    location: '',
+    manufacturer: '',
+    model: '',
+    serial_number: '',
+    calibration_due: '',
+    status: 'Ativo',
+    notes: ''
+  },
   editingId: null,
   editDraft: null,
   deleteTargetId: null
@@ -196,6 +231,23 @@ function getAuthHeaders(extra = {}) {
   };
 }
 
+function resetCreateForm() {
+  state.createPreviewUrl = '';
+  state.createForm = {
+    tag: '',
+    name: '',
+    equipment_type: '',
+    sector: '',
+    location: '',
+    manufacturer: '',
+    model: '',
+    serial_number: '',
+    calibration_due: '',
+    status: 'Ativo',
+    notes: ''
+  };
+}
+
 async function fetchWithTimeout(url, options = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), CONFIG.REQUEST_TIMEOUT_MS);
@@ -223,7 +275,15 @@ function normalizeItem(raw) {
     tag: raw.tag ?? '-',
     name: raw.name ?? 'Instrumento',
     photo: raw.photo ?? null,
-    status: raw.status ?? t('active')
+    equipment_type: raw.equipment_type ?? '',
+    sector: raw.sector ?? '',
+    location: raw.location ?? '',
+    manufacturer: raw.manufacturer ?? '',
+    model: raw.model ?? '',
+    serial_number: raw.serial_number ?? '',
+    calibration_due: raw.calibration_due ?? '',
+    status: raw.status ?? t('active'),
+    notes: raw.notes ?? ''
   };
 }
 
@@ -377,10 +437,35 @@ function searchResultHtml() {
   return `<div id="searchFeedback"></div>`;
 }
 
+function createAdditionalFields(prefix, values) {
+  return `
+    <div class="grid-2">
+      <input id="${prefix}TypeInput" class="input" placeholder="${t('equipmentType')}" value="${escapeHtml(values.equipment_type || '')}" />
+      <input id="${prefix}SectorInput" class="input" placeholder="${t('sector')}" value="${escapeHtml(values.sector || '')}" />
+      <input id="${prefix}LocationInput" class="input" placeholder="${t('location')}" value="${escapeHtml(values.location || '')}" />
+      <input id="${prefix}ManufacturerInput" class="input" placeholder="${t('manufacturer')}" value="${escapeHtml(values.manufacturer || '')}" />
+      <input id="${prefix}ModelInput" class="input" placeholder="${t('model')}" value="${escapeHtml(values.model || '')}" />
+      <input id="${prefix}SerialInput" class="input" placeholder="${t('serialNumber')}" value="${escapeHtml(values.serial_number || '')}" />
+      <input id="${prefix}CalibrationInput" class="input" placeholder="${t('calibrationDue')}" value="${escapeHtml(values.calibration_due || '')}" />
+      <input id="${prefix}StatusInput" class="input" placeholder="${t('chooseStatus')}" value="${escapeHtml(values.status || 'Ativo')}" />
+    </div>
+    <input id="${prefix}NotesInput" class="input" placeholder="${t('notes')}" value="${escapeHtml(values.notes || '')}" />
+  `;
+}
+
 function renderEditableRow(item) {
   const draft = state.editDraft || {
     tag: item.tag,
     name: item.name,
+    equipment_type: item.equipment_type || '',
+    sector: item.sector || '',
+    location: item.location || '',
+    manufacturer: item.manufacturer || '',
+    model: item.model || '',
+    serial_number: item.serial_number || '',
+    calibration_due: item.calibration_due || '',
+    status: item.status || 'Ativo',
+    notes: item.notes || '',
     photoFile: null,
     previewUrl: item.photo || ''
   };
@@ -388,26 +473,26 @@ function renderEditableRow(item) {
   return `
     <tr class="edit-row">
       <td class="code-soft">${escapeHtml(item.id)}</td>
-      <td>
-        <input id="editTagInput" class="input table-input" value="${escapeHtml(draft.tag)}" />
-      </td>
-      <td>
-        <input id="editNameInput" class="input table-input" value="${escapeHtml(draft.name)}" />
-      </td>
-      <td>
-        <div class="edit-photo-stack">
-          ${draft.previewUrl
-            ? `<img class="thumb thumb-large" src="${escapeHtml(draft.previewUrl)}" alt="${escapeHtml(draft.name)}" />`
-            : `<div class="thumb-fallback thumb-large">${t('noImage')}</div>`}
-          <input id="editPhotoInput" class="file-input compact-file" type="file" accept="image/*" />
-        </div>
-      </td>
-      <td>${statusPill(item.status)}</td>
-      <td>${qrHtml(item.tag)}</td>
-      <td>
-        <div class="inline-actions">
-          <button class="primary-button" id="saveEditButton">${t('save')}</button>
-          <button class="outline-button" id="cancelEditButton">${t('cancel')}</button>
+      <td colspan="6">
+        <div class="panel edit-panel">
+          <div class="grid-2">
+            <input id="editTagInput" class="input table-input" value="${escapeHtml(draft.tag)}" placeholder="${t('tag')}" />
+            <input id="editNameInput" class="input table-input" value="${escapeHtml(draft.name)}" placeholder="${t('name')}" />
+          </div>
+
+          ${createAdditionalFields('edit', draft)}
+
+          <div class="edit-photo-stack">
+            ${draft.previewUrl
+              ? `<img class="thumb thumb-large" src="${escapeHtml(draft.previewUrl)}" alt="${escapeHtml(draft.name)}" />`
+              : `<div class="thumb-fallback thumb-large">${t('noImage')}</div>`}
+            <input id="editPhotoInput" class="file-input compact-file" type="file" accept="image/*" />
+          </div>
+
+          <div class="inline-actions">
+            <button class="primary-button" id="saveEditButton">${t('save')}</button>
+            <button class="outline-button" id="cancelEditButton">${t('cancel')}</button>
+          </div>
         </div>
       </td>
     </tr>
@@ -434,7 +519,11 @@ function renderRows(items) {
       <tr>
         <td class="code-soft">${escapeHtml(item.id)}</td>
         <td><strong>${escapeHtml(item.tag)}</strong></td>
-        <td>${escapeHtml(item.name)}</td>
+        <td>
+          <strong>${escapeHtml(item.name)}</strong>
+          <div class="muted">${escapeHtml(item.equipment_type || '')}</div>
+          <div class="muted">${escapeHtml(item.model || '')}</div>
+        </td>
         <td>${photoHtml(item)}</td>
         <td>${statusPill(item.status)}</td>
         <td>${qrHtml(item.tag)}</td>
@@ -537,8 +626,11 @@ function renderApp(notice = '') {
       <div class="grid-2">
         <div class="card panel">
           <h3>${t('formTitle')}</h3>
-          <input id="tagInput" class="input" placeholder="${t('tag')}" />
-          <input id="nameInput" class="input" placeholder="${t('name')}" />
+          <input id="tagInput" class="input" placeholder="${t('tag')}" value="${escapeHtml(state.createForm.tag)}" />
+          <input id="nameInput" class="input" placeholder="${t('name')}" value="${escapeHtml(state.createForm.name)}" />
+
+          ${createAdditionalFields('create', state.createForm)}
+
           <input id="photoInput" class="file-input" type="file" accept="image/*" />
           ${createPreviewBlock()}
           <div class="inline-actions">
@@ -582,12 +674,44 @@ function renderApp(notice = '') {
         </div>
       </div>
 
-      <div class="footer-note">Admin V3 • QR + login + UX profissional</div>
+      <div class="footer-note">Admin V3 • login + QR + campos completos</div>
     </section>
   `;
 
   bindEvents();
   renderQRCodes();
+}
+
+function updateCreateFormState() {
+  state.createForm.tag = normalizeText(document.getElementById('tagInput')?.value);
+  state.createForm.name = normalizeText(document.getElementById('nameInput')?.value);
+  state.createForm.equipment_type = normalizeText(document.getElementById('createTypeInput')?.value);
+  state.createForm.sector = normalizeText(document.getElementById('createSectorInput')?.value);
+  state.createForm.location = normalizeText(document.getElementById('createLocationInput')?.value);
+  state.createForm.manufacturer = normalizeText(document.getElementById('createManufacturerInput')?.value);
+  state.createForm.model = normalizeText(document.getElementById('createModelInput')?.value);
+  state.createForm.serial_number = normalizeText(document.getElementById('createSerialInput')?.value);
+  state.createForm.calibration_due = normalizeText(document.getElementById('createCalibrationInput')?.value);
+  state.createForm.status = normalizeText(document.getElementById('createStatusInput')?.value) || 'Ativo';
+  state.createForm.notes = normalizeText(document.getElementById('createNotesInput')?.value);
+}
+
+function bindCreateFormLiveState() {
+  [
+    'tagInput',
+    'nameInput',
+    'createTypeInput',
+    'createSectorInput',
+    'createLocationInput',
+    'createManufacturerInput',
+    'createModelInput',
+    'createSerialInput',
+    'createCalibrationInput',
+    'createStatusInput',
+    'createNotesInput'
+  ].forEach((id) => {
+    document.getElementById(id)?.addEventListener('input', updateCreateFormState);
+  });
 }
 
 function bindLoginEvents() {
@@ -619,7 +743,10 @@ function bindLoginEvents() {
 }
 
 function bindEvents() {
+  bindCreateFormLiveState();
+
   document.getElementById('photoInput')?.addEventListener('change', (event) => {
+    updateCreateFormState();
     const file = event.target.files?.[0];
     if (!file) {
       state.createPreviewUrl = '';
@@ -638,9 +765,11 @@ function bindEvents() {
   });
 
   document.getElementById('createButton')?.addEventListener('click', async () => {
-    const tag = document.getElementById('tagInput').value.trim();
-    const name = document.getElementById('nameInput').value.trim();
-    const photoFile = document.getElementById('photoInput').files[0];
+    updateCreateFormState();
+
+    const tag = state.createForm.tag;
+    const name = state.createForm.name;
+    const photoFile = document.getElementById('photoInput')?.files?.[0];
     const feedback = document.getElementById('createFeedback');
 
     if (!tag || !name || !photoFile) {
@@ -652,12 +781,21 @@ function bindEvents() {
     formData.append('tag', tag);
     formData.append('name', name);
     formData.append('photo', photoFile);
+    formData.append('equipment_type', state.createForm.equipment_type);
+    formData.append('sector', state.createForm.sector);
+    formData.append('location', state.createForm.location);
+    formData.append('manufacturer', state.createForm.manufacturer);
+    formData.append('model', state.createForm.model);
+    formData.append('serial_number', state.createForm.serial_number);
+    formData.append('calibration_due', state.createForm.calibration_due);
+    formData.append('status', state.createForm.status);
+    formData.append('notes', state.createForm.notes);
 
     feedback.innerHTML = `<div class="notice">${t('creating')}</div>`;
 
     try {
       await createEquipment(formData);
-      state.createPreviewUrl = '';
+      resetCreateForm();
       await loadItems();
       renderApp(`<div class="notice success">${t('createSuccess')}</div>`);
     } catch (error) {
@@ -684,6 +822,7 @@ function bindEvents() {
             <div class="search-result-label">${t('searchResult')}</div>
             <strong>${escapeHtml(item.name)}</strong>
             <div class="muted">TAG: ${escapeHtml(item.tag)}</div>
+            <div class="muted">${escapeHtml(item.equipment_type || '')}</div>
             <div class="inline-actions">
               <a class="secondary-button" href="${viewerUrlForTag(item.tag)}" target="_blank" rel="noopener noreferrer">${t('openViewer')}</a>
               ${item.photo ? `<a class="outline-button" href="${escapeHtml(item.photo)}" target="_blank" rel="noopener noreferrer">${t('photo')}</a>` : ''}
@@ -719,12 +858,53 @@ function bindEvents() {
     renderApp();
   });
 
+  [
+    'editTagInput',
+    'editNameInput',
+    'editTypeInput',
+    'editSectorInput',
+    'editLocationInput',
+    'editManufacturerInput',
+    'editModelInput',
+    'editSerialInput',
+    'editCalibrationInput',
+    'editStatusInput',
+    'editNotesInput'
+  ].forEach((id) => {
+    document.getElementById(id)?.addEventListener('input', () => {
+      state.editDraft = {
+        ...state.editDraft,
+        tag: normalizeText(document.getElementById('editTagInput')?.value),
+        name: normalizeText(document.getElementById('editNameInput')?.value),
+        equipment_type: normalizeText(document.getElementById('editTypeInput')?.value),
+        sector: normalizeText(document.getElementById('editSectorInput')?.value),
+        location: normalizeText(document.getElementById('editLocationInput')?.value),
+        manufacturer: normalizeText(document.getElementById('editManufacturerInput')?.value),
+        model: normalizeText(document.getElementById('editModelInput')?.value),
+        serial_number: normalizeText(document.getElementById('editSerialInput')?.value),
+        calibration_due: normalizeText(document.getElementById('editCalibrationInput')?.value),
+        status: normalizeText(document.getElementById('editStatusInput')?.value),
+        notes: normalizeText(document.getElementById('editNotesInput')?.value),
+      };
+    });
+  });
+
   document.getElementById('saveEditButton')?.addEventListener('click', async () => {
     if (!state.editingId || !state.editDraft) return;
 
     const form = new FormData();
-    form.append('tag', normalizeText(document.getElementById('editTagInput')?.value));
-    form.append('name', normalizeText(document.getElementById('editNameInput')?.value));
+    form.append('tag', state.editDraft.tag || '');
+    form.append('name', state.editDraft.name || '');
+    form.append('equipment_type', state.editDraft.equipment_type || '');
+    form.append('sector', state.editDraft.sector || '');
+    form.append('location', state.editDraft.location || '');
+    form.append('manufacturer', state.editDraft.manufacturer || '');
+    form.append('model', state.editDraft.model || '');
+    form.append('serial_number', state.editDraft.serial_number || '');
+    form.append('calibration_due', state.editDraft.calibration_due || '');
+    form.append('status', state.editDraft.status || 'Ativo');
+    form.append('notes', state.editDraft.notes || '');
+
     if (state.editDraft.photoFile) {
       form.append('photo', state.editDraft.photoFile);
     }
@@ -787,6 +967,15 @@ window.startEditItem = function(id) {
   state.editDraft = {
     tag: item.tag,
     name: item.name,
+    equipment_type: item.equipment_type || '',
+    sector: item.sector || '',
+    location: item.location || '',
+    manufacturer: item.manufacturer || '',
+    model: item.model || '',
+    serial_number: item.serial_number || '',
+    calibration_due: item.calibration_due || '',
+    status: item.status || 'Ativo',
+    notes: item.notes || '',
     photoFile: null,
     previewUrl: item.photo || ''
   };
