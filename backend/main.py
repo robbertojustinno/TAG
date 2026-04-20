@@ -1,5 +1,6 @@
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 import cloudinary
 import cloudinary.uploader
 import os
@@ -13,6 +14,10 @@ if not DATABASE_URL:
 
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "123456")
+ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "tagcheck-admin-token")
 
 engine = create_engine(DATABASE_URL, pool_pre_ping=True, future=True)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
@@ -47,13 +52,25 @@ cloudinary.config(
 )
 
 
-def serialize_equipment(item: Equipment):
+class LoginPayload(BaseModel):
+    username: str
+    password: str
+
+
+def serialize_equipment(item: Equipment) -> dict:
     return {
         "id": item.id,
         "tag": item.tag,
         "name": item.name,
         "photo": item.photo,
     }
+
+
+def require_admin(authorization: str = Header(default=None)) -> str:
+    expected = f"Bearer {ADMIN_TOKEN}"
+    if authorization != expected:
+        raise HTTPException(status_code=401, detail="Não autorizado.")
+    return authorization
 
 
 @app.get("/")
@@ -66,11 +83,27 @@ def health():
     return {"ok": True}
 
 
+@app.post("/auth/login")
+def login(payload: LoginPayload):
+    username = (payload.username or "").strip()
+    password = payload.password or ""
+
+    if username != ADMIN_USERNAME or password != ADMIN_PASSWORD:
+        raise HTTPException(status_code=401, detail="Usuário ou senha inválidos.")
+
+    return {
+        "ok": True,
+        "token": ADMIN_TOKEN,
+        "username": ADMIN_USERNAME,
+    }
+
+
 @app.post("/equipment")
 async def create_equipment(
     tag: str = Form(...),
     name: str = Form(...),
-    photo: UploadFile = File(...)
+    photo: UploadFile = File(...),
+    _auth: str = Depends(require_admin),
 ):
     if not tag.strip():
         raise HTTPException(status_code=400, detail="TAG é obrigatória.")
@@ -146,7 +179,8 @@ async def update_equipment(
     id: int,
     tag: str = Form(...),
     name: str = Form(...),
-    photo: UploadFile | None = File(None)
+    photo: UploadFile | None = File(None),
+    _auth: str = Depends(require_admin),
 ):
     db = SessionLocal()
     try:
@@ -154,7 +188,10 @@ async def update_equipment(
         if not item:
             raise HTTPException(status_code=404, detail="Equipamento não encontrado.")
 
-        duplicated = db.query(Equipment).filter(Equipment.tag == tag.strip(), Equipment.id != id).first()
+        duplicated = db.query(Equipment).filter(
+            Equipment.tag == tag.strip(),
+            Equipment.id != id
+        ).first()
         if duplicated:
             raise HTTPException(status_code=400, detail="TAG já cadastrada em outro equipamento.")
 
@@ -185,7 +222,10 @@ async def update_equipment(
 
 
 @app.delete("/equipment/{id}")
-def delete_equipment(id: int):
+def delete_equipment(
+    id: int,
+    _auth: str = Depends(require_admin),
+):
     db = SessionLocal()
     try:
         item = db.query(Equipment).filter(Equipment.id == id).first()
