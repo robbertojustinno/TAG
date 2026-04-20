@@ -495,6 +495,20 @@ tbody tr:hover {
   background: white;
   padding: 8px;
   box-shadow: var(--shadow-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.qr-box img,
+.qr-box canvas {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain !important;
+  display: block;
+  image-rendering: pixelated;
 }
 
 .qr-link {
@@ -554,6 +568,20 @@ tbody tr:hover {
 .login-stack {
   display: grid;
   gap: 12px;
+}
+
+img[src*="qr"],
+img[src*="qrcode"],
+img[alt*="QR"],
+img[alt*="Qr"],
+img[alt*="qr"] {
+  object-fit: contain !important;
+  image-rendering: pixelated;
+}
+
+canvas {
+  max-width: 100%;
+  height: auto !important;
 }
 
 @keyframes spin {
