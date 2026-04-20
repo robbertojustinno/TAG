@@ -668,3 +668,47 @@ canvas {
     height: 60px;
   }
 }
+
+
+/* ===== CORREÇÃO DE ESPAÇOS EXAGERADOS ===== */
+
+/* reduz altura dos blocos */
+.panel {
+  padding: 10px !important;
+  gap: 6px !important;
+}
+
+/* remove aquele espaço morto nas telas */
+.grid-2 {
+  align-items: start !important;
+}
+
+/* evita que cards estiquem atoa */
+.card {
+  height: auto !important;
+}
+
+/* corrige área de busca (IMG 1 e 2) */
+#searchFeedback {
+  margin-top: 6px;
+}
+
+/* reduz espaço entre input e botões */
+.inline-actions {
+  margin-top: 6px;
+}
+
+/* inputs mais compactos */
+.input {
+  margin-bottom: 4px;
+}
+
+/* reduz área vazia da busca */
+.card.panel {
+  align-content: start;
+}
+
+/* evita crescimento vertical desnecessário */
+.screen {
+  align-content: start;
+}
