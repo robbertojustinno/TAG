@@ -986,8 +986,12 @@ function renderQRCodes() {
     if (!canvas || typeof QRCode === 'undefined') return;
 
     QRCode.toCanvas(canvas, viewerUrlForTag(item.tag), {
-      width: 116,
-      margin: 1
+      width: 140,
+      margin: 2,
+      color: {
+        dark: "#000000",
+        light: "#ffffff"
+      }
     }, () => {});
   });
 }
