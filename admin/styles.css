@@ -47,6 +47,10 @@ a {
   text-decoration: none;
 }
 
+.hidden {
+  display: none !important;
+}
+
 .app-shell {
   width: 100%;
   max-width: 1320px;
@@ -521,6 +525,37 @@ tbody tr:hover {
   border-color: rgba(239, 68, 68, 0.18);
 }
 
+.login-shell {
+  min-height: calc(100vh - 130px);
+  display: grid;
+  place-items: center;
+  padding: 12px 0;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 460px;
+  padding: 24px;
+  display: grid;
+  gap: 16px;
+}
+
+.login-title {
+  margin: 0;
+  font-size: 1.7rem;
+  letter-spacing: -0.03em;
+}
+
+.login-subtitle {
+  margin: 0;
+  color: var(--muted);
+}
+
+.login-stack {
+  display: grid;
+  gap: 12px;
+}
+
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
@@ -537,7 +572,8 @@ tbody tr:hover {
 
   .hero,
   .panel,
-  .topbar {
+  .topbar,
+  .login-card {
     padding: 16px;
   }
 

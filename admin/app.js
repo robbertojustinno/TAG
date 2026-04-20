@@ -1,6 +1,7 @@
 const CONFIG = window.TAGCHECK_ADMIN_CONFIG;
 const app = document.getElementById('app');
 const openViewerButton = document.getElementById('openViewerButton');
+const logoutButton = document.getElementById('logoutButton');
 
 const I18N = {
   pt: {
@@ -25,8 +26,6 @@ const I18N = {
     tag: 'TAG',
     name: 'Nome',
     photo: 'Foto',
-    choosePhoto: 'Escolher foto',
-    changePhoto: 'Trocar foto',
     noImage: 'Sem foto',
     qr: 'QR',
     actions: 'Ações',
@@ -44,6 +43,15 @@ const I18N = {
     searchError: 'Nenhum equipamento encontrado para esta TAG.',
     apiCheck: 'Verificando API...',
     viewer: 'Viewer',
+    logout: 'Sair',
+    loginTitle: 'Login do Admin',
+    loginSubtitle: 'Acesso protegido ao painel de gestão.',
+    username: 'Usuário',
+    password: 'Senha',
+    loginButton: 'Entrar',
+    loginLoading: 'Entrando...',
+    loginError: 'Falha ao entrar.',
+    loginSuccess: 'Login realizado com sucesso.',
     edit: 'Editar',
     delete: 'Excluir',
     save: 'Salvar',
@@ -82,8 +90,6 @@ const I18N = {
     tag: 'TAG',
     name: 'Name',
     photo: 'Photo',
-    choosePhoto: 'Choose photo',
-    changePhoto: 'Change photo',
     noImage: 'No image',
     qr: 'QR',
     actions: 'Actions',
@@ -101,6 +107,15 @@ const I18N = {
     searchError: 'No equipment found for this TAG.',
     apiCheck: 'Checking API...',
     viewer: 'Viewer',
+    logout: 'Logout',
+    loginTitle: 'Admin Login',
+    loginSubtitle: 'Protected access to the management panel.',
+    username: 'Username',
+    password: 'Password',
+    loginButton: 'Sign in',
+    loginLoading: 'Signing in...',
+    loginError: 'Failed to sign in.',
+    loginSuccess: 'Signed in successfully.',
     edit: 'Edit',
     delete: 'Delete',
     save: 'Save',
@@ -121,6 +136,8 @@ const I18N = {
 
 const state = {
   language: localStorage.getItem(CONFIG.STORAGE_KEYS.language) || 'pt',
+  authToken: localStorage.getItem(CONFIG.STORAGE_KEYS.authToken) || '',
+  authUser: localStorage.getItem(CONFIG.STORAGE_KEYS.authUser) || '',
   items: [],
   apiReachable: null,
   createPreviewUrl: '',
@@ -137,7 +154,7 @@ function setLanguage(lang) {
   state.language = lang;
   localStorage.setItem(CONFIG.STORAGE_KEYS.language, lang);
   syncHeaderLanguage();
-  renderApp();
+  renderCurrentView();
 }
 
 function syncHeaderLanguage() {
@@ -150,6 +167,8 @@ function syncHeaderLanguage() {
     ? 'secondary-button lang-button active'
     : 'outline-button lang-button';
   openViewerButton.textContent = t('viewer');
+  logoutButton.textContent = t('logout');
+  logoutButton.classList.toggle('hidden', !state.authToken);
 }
 
 function escapeHtml(value) {
@@ -167,6 +186,14 @@ function normalizeText(value) {
 
 function buildUrl(base, path) {
   return `${base.replace(/\/$/, '')}${path}`;
+}
+
+function getAuthHeaders(extra = {}) {
+  if (!state.authToken) return extra;
+  return {
+    ...extra,
+    Authorization: `Bearer ${state.authToken}`
+  };
 }
 
 async function fetchWithTimeout(url, options = {}) {
@@ -198,6 +225,24 @@ function normalizeItem(raw) {
     photo: raw.photo ?? null,
     status: raw.status ?? t('active')
   };
+}
+
+async function loginAdmin(username, password) {
+  const response = await fetchWithTimeout(buildUrl(CONFIG.API_BASE_URL, CONFIG.ENDPOINTS.login), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json'
+    },
+    body: JSON.stringify({ username, password })
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || t('loginError'));
+  }
+
+  return await response.json();
 }
 
 async function loadItems() {
@@ -236,6 +281,7 @@ async function searchByTag(tag) {
 async function createEquipment(formData) {
   const response = await fetchWithTimeout(buildUrl(CONFIG.API_BASE_URL, CONFIG.ENDPOINTS.create), {
     method: 'POST',
+    headers: getAuthHeaders(),
     body: formData
   });
 
@@ -251,6 +297,7 @@ async function createEquipment(formData) {
 async function updateEquipment(id, formData) {
   const response = await fetchWithTimeout(`${CONFIG.API_BASE_URL}/equipment/${id}`, {
     method: 'PUT',
+    headers: getAuthHeaders(),
     body: formData
   });
 
@@ -264,7 +311,8 @@ async function updateEquipment(id, formData) {
 
 async function deleteEquipment(id) {
   const response = await fetchWithTimeout(`${CONFIG.API_BASE_URL}/equipment/${id}`, {
-    method: 'DELETE'
+    method: 'DELETE',
+    headers: getAuthHeaders()
   });
 
   if (!response.ok) {
@@ -326,13 +374,16 @@ function createPreviewBlock() {
 }
 
 function searchResultHtml() {
-  return `
-    <div id="searchFeedback"></div>
-  `;
+  return `<div id="searchFeedback"></div>`;
 }
 
 function renderEditableRow(item) {
-  const draft = state.editDraft || { tag: item.tag, name: item.name, photoFile: null, previewUrl: item.photo || '' };
+  const draft = state.editDraft || {
+    tag: item.tag,
+    name: item.name,
+    photoFile: null,
+    previewUrl: item.photo || ''
+  };
 
   return `
     <tr class="edit-row">
@@ -417,6 +468,32 @@ function renderDeleteConfirm() {
       </div>
     </div>
   `;
+}
+
+function renderLogin(notice = '') {
+  app.innerHTML = `
+    <section class="login-shell">
+      <div class="card login-card">
+        <div>
+          <h2 class="login-title">${t('loginTitle')}</h2>
+          <p class="login-subtitle">${t('loginSubtitle')}</p>
+        </div>
+
+        <div class="login-stack">
+          <input id="loginUserInput" class="input" placeholder="${t('username')}" autocomplete="username" />
+          <input id="loginPassInput" class="input" placeholder="${t('password')}" type="password" autocomplete="current-password" />
+        </div>
+
+        <div class="inline-actions">
+          <button id="loginButton" class="primary-button">${t('loginButton')}</button>
+        </div>
+
+        <div id="loginFeedback">${notice}</div>
+      </div>
+    </section>
+  `;
+
+  bindLoginEvents();
 }
 
 function renderApp(notice = '') {
@@ -505,12 +582,40 @@ function renderApp(notice = '') {
         </div>
       </div>
 
-      <div class="footer-note">Admin V2 • backend único • UX profissional</div>
+      <div class="footer-note">Admin V3 • QR + login + UX profissional</div>
     </section>
   `;
 
   bindEvents();
   renderQRCodes();
+}
+
+function bindLoginEvents() {
+  document.getElementById('loginButton')?.addEventListener('click', async () => {
+    const username = normalizeText(document.getElementById('loginUserInput')?.value);
+    const password = document.getElementById('loginPassInput')?.value || '';
+    const feedback = document.getElementById('loginFeedback');
+
+    if (!username || !password) {
+      feedback.innerHTML = `<div class="notice error">${t('loginError')}</div>`;
+      return;
+    }
+
+    feedback.innerHTML = `<div class="notice">${t('loginLoading')}</div>`;
+
+    try {
+      const result = await loginAdmin(username, password);
+      state.authToken = result.token;
+      state.authUser = result.username || username;
+      localStorage.setItem(CONFIG.STORAGE_KEYS.authToken, state.authToken);
+      localStorage.setItem(CONFIG.STORAGE_KEYS.authUser, state.authUser);
+      syncHeaderLanguage();
+      await loadItems();
+      renderApp(`<div class="notice success">${t('loginSuccess')}</div>`);
+    } catch (error) {
+      feedback.innerHTML = `<div class="notice error">${escapeHtml(error.message || t('loginError'))}</div>`;
+    }
+  });
 }
 
 function bindEvents() {
@@ -695,20 +800,53 @@ window.askDeleteItem = function(id) {
   renderApp();
 };
 
+function logoutAdmin() {
+  state.authToken = '';
+  state.authUser = '';
+  state.items = [];
+  state.editingId = null;
+  state.editDraft = null;
+  state.deleteTargetId = null;
+  localStorage.removeItem(CONFIG.STORAGE_KEYS.authToken);
+  localStorage.removeItem(CONFIG.STORAGE_KEYS.authUser);
+  syncHeaderLanguage();
+  renderLogin();
+}
+
+function renderCurrentView(notice = '') {
+  syncHeaderLanguage();
+
+  if (!state.authToken) {
+    renderLogin(notice);
+    return;
+  }
+
+  renderApp(notice);
+}
+
 async function boot() {
   syncHeaderLanguage();
   openViewerButton.href = CONFIG.VIEWER_BASE_URL;
 
   try {
     await pingApi();
-    await loadItems();
-    renderApp();
+    if (state.authToken) {
+      await loadItems();
+      renderApp();
+    } else {
+      renderLogin();
+    }
   } catch (error) {
-    renderApp(`<div class="notice error">${escapeHtml(error.message || t('listError'))}</div>`);
+    if (state.authToken) {
+      renderApp(`<div class="notice error">${escapeHtml(error.message || t('listError'))}</div>`);
+    } else {
+      renderLogin(`<div class="notice error">${escapeHtml(error.message || t('apiFail'))}</div>`);
+    }
   }
 }
 
 document.getElementById('langPt').addEventListener('click', () => setLanguage('pt'));
 document.getElementById('langEn').addEventListener('click', () => setLanguage('en'));
+logoutButton.addEventListener('click', logoutAdmin);
 
 boot();
