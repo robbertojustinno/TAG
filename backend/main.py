@@ -38,7 +38,8 @@ class Equipment(Base):
     manufacturer = Column(String, nullable=True)
     model = Column(String, nullable=True)
     serial_number = Column(String, nullable=True)
-    calibration_due = Column(String, nullable=True)
+    calibration_date = Column(String, nullable=True)
+    next_calibration_date = Column(String, nullable=True)
     status = Column(String, nullable=True)
     notes = Column(Text, nullable=True)
 
@@ -57,7 +58,8 @@ def ensure_extra_columns() -> None:
         "manufacturer": "VARCHAR",
         "model": "VARCHAR",
         "serial_number": "VARCHAR",
-        "calibration_due": "VARCHAR",
+        "calibration_date": "VARCHAR",
+        "next_calibration_date": "VARCHAR",
         "status": "VARCHAR",
         "notes": "TEXT",
     }
@@ -106,7 +108,8 @@ def serialize_equipment(item: Equipment) -> dict:
         "manufacturer": item.manufacturer or "",
         "model": item.model or "",
         "serial_number": item.serial_number or "",
-        "calibration_due": item.calibration_due or "",
+        "calibration_date": item.calibration_date or "",
+        "next_calibration_date": item.next_calibration_date or "",
         "status": item.status or "Ativo",
         "notes": item.notes or "",
     }
@@ -155,7 +158,8 @@ async def create_equipment(
     manufacturer: str = Form(""),
     model: str = Form(""),
     serial_number: str = Form(""),
-    calibration_due: str = Form(""),
+    calibration_date: str = Form(""),
+    next_calibration_date: str = Form(""),
     status: str = Form("Ativo"),
     notes: str = Form(""),
     _auth: str = Depends(require_admin),
@@ -192,7 +196,8 @@ async def create_equipment(
             manufacturer=manufacturer.strip(),
             model=model.strip(),
             serial_number=serial_number.strip(),
-            calibration_due=calibration_due.strip(),
+            calibration_date=calibration_date.strip(),
+            next_calibration_date=next_calibration_date.strip(),
             status=status.strip() or "Ativo",
             notes=notes.strip(),
         )
@@ -250,7 +255,8 @@ async def update_equipment(
     manufacturer: str = Form(""),
     model: str = Form(""),
     serial_number: str = Form(""),
-    calibration_due: str = Form(""),
+    calibration_date: str = Form(""),
+    next_calibration_date: str = Form(""),
     status: str = Form("Ativo"),
     notes: str = Form(""),
     _auth: str = Depends(require_admin),
@@ -276,7 +282,8 @@ async def update_equipment(
         item.manufacturer = manufacturer.strip()
         item.model = model.strip()
         item.serial_number = serial_number.strip()
-        item.calibration_due = calibration_due.strip()
+        item.calibration_date = calibration_date.strip()
+        item.next_calibration_date = next_calibration_date.strip()
         item.status = status.strip() or "Ativo"
         item.notes = notes.strip()
 
