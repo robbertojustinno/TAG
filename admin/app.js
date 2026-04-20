@@ -979,13 +979,24 @@ function bindEvents() {
   });
 }
 
+function buildQrPayload(item) {
+  return `TAGCHECK | MODO HIBRIDO
+TAG: ${item.tag}
+NOME: ${item.name}
+TIPO: ${item.equipment_type || '-'}
+CALIBRACAO: ${item.next_calibration_date || item.calibration_date || '-'}
+DADOS MINIMOS PORQUE TA OFFLINE`;
+}
+
 function renderQRCodes() {
   state.items.forEach((item) => {
     const qrId = `qr-${String(item.tag).replace(/[^a-zA-Z0-9_-]/g, '')}`;
     const canvas = document.getElementById(qrId);
     if (!canvas || typeof QRCode === 'undefined') return;
 
-    QRCode.toCanvas(canvas, viewerUrlForTag(item.tag), {
+    const payload = buildQrPayload(item);
+
+    QRCode.toCanvas(canvas, payload, {
       width: 140,
       margin: 2,
       color: {
