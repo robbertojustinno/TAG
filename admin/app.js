@@ -73,11 +73,10 @@ const I18N = {
     manufacturer: 'Fabricante',
     model: 'Modelo',
     serialNumber: 'Nº de série',
-    calibrationDue: 'Calibração',
+    calibrationDate: 'Data da calibração',
+    nextCalibrationDate: 'Próxima calibração',
     notes: 'Observações',
     chooseStatus: 'Status',
-    placeholderStatus: 'Ativo',
-    authRequired: 'Faça login para continuar.'
   },
   en: {
     brandTitle: 'TagCheck • Smart Asset Tracking',
@@ -148,11 +147,10 @@ const I18N = {
     manufacturer: 'Manufacturer',
     model: 'Model',
     serialNumber: 'Serial number',
-    calibrationDue: 'Calibration',
+    calibrationDate: 'Calibration date',
+    nextCalibrationDate: 'Next calibration',
     notes: 'Notes',
     chooseStatus: 'Status',
-    placeholderStatus: 'Active',
-    authRequired: 'Sign in to continue.'
   }
 };
 
@@ -163,6 +161,7 @@ const state = {
   items: [],
   apiReachable: null,
   createPreviewUrl: '',
+  createPhotoFile: null,
   createForm: {
     tag: '',
     name: '',
@@ -172,7 +171,8 @@ const state = {
     manufacturer: '',
     model: '',
     serial_number: '',
-    calibration_due: '',
+    calibration_date: '',
+    next_calibration_date: '',
     status: 'Ativo',
     notes: ''
   },
@@ -233,6 +233,7 @@ function getAuthHeaders(extra = {}) {
 
 function resetCreateForm() {
   state.createPreviewUrl = '';
+  state.createPhotoFile = null;
   state.createForm = {
     tag: '',
     name: '',
@@ -242,7 +243,8 @@ function resetCreateForm() {
     manufacturer: '',
     model: '',
     serial_number: '',
-    calibration_due: '',
+    calibration_date: '',
+    next_calibration_date: '',
     status: 'Ativo',
     notes: ''
   };
@@ -281,7 +283,8 @@ function normalizeItem(raw) {
     manufacturer: raw.manufacturer ?? '',
     model: raw.model ?? '',
     serial_number: raw.serial_number ?? '',
-    calibration_due: raw.calibration_due ?? '',
+    calibration_date: raw.calibration_date ?? '',
+    next_calibration_date: raw.next_calibration_date ?? '',
     status: raw.status ?? t('active'),
     notes: raw.notes ?? ''
   };
@@ -438,6 +441,10 @@ function searchResultHtml() {
 }
 
 function createAdditionalFields(prefix, values) {
+  const isEdit = prefix === 'edit';
+  const calibrationType = 'date';
+  const nextCalibrationType = 'date';
+
   return `
     <div class="grid-2">
       <input id="${prefix}TypeInput" class="input" placeholder="${t('equipmentType')}" value="${escapeHtml(values.equipment_type || '')}" />
@@ -446,10 +453,11 @@ function createAdditionalFields(prefix, values) {
       <input id="${prefix}ManufacturerInput" class="input" placeholder="${t('manufacturer')}" value="${escapeHtml(values.manufacturer || '')}" />
       <input id="${prefix}ModelInput" class="input" placeholder="${t('model')}" value="${escapeHtml(values.model || '')}" />
       <input id="${prefix}SerialInput" class="input" placeholder="${t('serialNumber')}" value="${escapeHtml(values.serial_number || '')}" />
-      <input id="${prefix}CalibrationInput" class="input" placeholder="${t('calibrationDue')}" value="${escapeHtml(values.calibration_due || '')}" />
+      <input id="${prefix}CalibrationDateInput" class="input" type="${calibrationType}" placeholder="${t('calibrationDate')}" value="${escapeHtml(values.calibration_date || '')}" />
+      <input id="${prefix}NextCalibrationDateInput" class="input" type="${nextCalibrationType}" placeholder="${t('nextCalibrationDate')}" value="${escapeHtml(values.next_calibration_date || '')}" />
       <input id="${prefix}StatusInput" class="input" placeholder="${t('chooseStatus')}" value="${escapeHtml(values.status || 'Ativo')}" />
+      <input id="${prefix}NotesInput" class="input" placeholder="${t('notes')}" value="${escapeHtml(values.notes || '')}" />
     </div>
-    <input id="${prefix}NotesInput" class="input" placeholder="${t('notes')}" value="${escapeHtml(values.notes || '')}" />
   `;
 }
 
@@ -463,7 +471,8 @@ function renderEditableRow(item) {
     manufacturer: item.manufacturer || '',
     model: item.model || '',
     serial_number: item.serial_number || '',
-    calibration_due: item.calibration_due || '',
+    calibration_date: item.calibration_date || '',
+    next_calibration_date: item.next_calibration_date || '',
     status: item.status || 'Ativo',
     notes: item.notes || '',
     photoFile: null,
@@ -523,6 +532,7 @@ function renderRows(items) {
           <strong>${escapeHtml(item.name)}</strong>
           <div class="muted">${escapeHtml(item.equipment_type || '')}</div>
           <div class="muted">${escapeHtml(item.model || '')}</div>
+          <div class="muted">${escapeHtml(item.serial_number || '')}</div>
         </td>
         <td>${photoHtml(item)}</td>
         <td>${statusPill(item.status)}</td>
@@ -674,7 +684,7 @@ function renderApp(notice = '') {
         </div>
       </div>
 
-      <div class="footer-note">Admin V3 • login + QR + campos completos</div>
+      <div class="footer-note">Admin V3 • login + QR + calibração + campos completos</div>
     </section>
   `;
 
@@ -691,7 +701,8 @@ function updateCreateFormState() {
   state.createForm.manufacturer = normalizeText(document.getElementById('createManufacturerInput')?.value);
   state.createForm.model = normalizeText(document.getElementById('createModelInput')?.value);
   state.createForm.serial_number = normalizeText(document.getElementById('createSerialInput')?.value);
-  state.createForm.calibration_due = normalizeText(document.getElementById('createCalibrationInput')?.value);
+  state.createForm.calibration_date = normalizeText(document.getElementById('createCalibrationDateInput')?.value);
+  state.createForm.next_calibration_date = normalizeText(document.getElementById('createNextCalibrationDateInput')?.value);
   state.createForm.status = normalizeText(document.getElementById('createStatusInput')?.value) || 'Ativo';
   state.createForm.notes = normalizeText(document.getElementById('createNotesInput')?.value);
 }
@@ -706,11 +717,13 @@ function bindCreateFormLiveState() {
     'createManufacturerInput',
     'createModelInput',
     'createSerialInput',
-    'createCalibrationInput',
+    'createCalibrationDateInput',
+    'createNextCalibrationDateInput',
     'createStatusInput',
     'createNotesInput'
   ].forEach((id) => {
     document.getElementById(id)?.addEventListener('input', updateCreateFormState);
+    document.getElementById(id)?.addEventListener('change', updateCreateFormState);
   });
 }
 
@@ -748,17 +761,16 @@ function bindEvents() {
   document.getElementById('photoInput')?.addEventListener('change', (event) => {
     updateCreateFormState();
     const file = event.target.files?.[0];
-    if (!file) {
-      state.createPreviewUrl = '';
-      renderApp();
-      return;
-    }
-    state.createPreviewUrl = URL.createObjectURL(file);
+
+    state.createPhotoFile = file || null;
+    state.createPreviewUrl = file ? URL.createObjectURL(file) : '';
+
     renderApp();
   });
 
   document.getElementById('clearCreatePhoto')?.addEventListener('click', () => {
     state.createPreviewUrl = '';
+    state.createPhotoFile = null;
     const input = document.getElementById('photoInput');
     if (input) input.value = '';
     renderApp();
@@ -769,7 +781,7 @@ function bindEvents() {
 
     const tag = state.createForm.tag;
     const name = state.createForm.name;
-    const photoFile = document.getElementById('photoInput')?.files?.[0];
+    const photoFile = state.createPhotoFile;
     const feedback = document.getElementById('createFeedback');
 
     if (!tag || !name || !photoFile) {
@@ -787,7 +799,8 @@ function bindEvents() {
     formData.append('manufacturer', state.createForm.manufacturer);
     formData.append('model', state.createForm.model);
     formData.append('serial_number', state.createForm.serial_number);
-    formData.append('calibration_due', state.createForm.calibration_due);
+    formData.append('calibration_date', state.createForm.calibration_date);
+    formData.append('next_calibration_date', state.createForm.next_calibration_date);
     formData.append('status', state.createForm.status);
     formData.append('notes', state.createForm.notes);
 
@@ -823,6 +836,7 @@ function bindEvents() {
             <strong>${escapeHtml(item.name)}</strong>
             <div class="muted">TAG: ${escapeHtml(item.tag)}</div>
             <div class="muted">${escapeHtml(item.equipment_type || '')}</div>
+            <div class="muted">${escapeHtml(item.calibration_date || '')} → ${escapeHtml(item.next_calibration_date || '')}</div>
             <div class="inline-actions">
               <a class="secondary-button" href="${viewerUrlForTag(item.tag)}" target="_blank" rel="noopener noreferrer">${t('openViewer')}</a>
               ${item.photo ? `<a class="outline-button" href="${escapeHtml(item.photo)}" target="_blank" rel="noopener noreferrer">${t('photo')}</a>` : ''}
@@ -867,7 +881,8 @@ function bindEvents() {
     'editManufacturerInput',
     'editModelInput',
     'editSerialInput',
-    'editCalibrationInput',
+    'editCalibrationDateInput',
+    'editNextCalibrationDateInput',
     'editStatusInput',
     'editNotesInput'
   ].forEach((id) => {
@@ -882,7 +897,25 @@ function bindEvents() {
         manufacturer: normalizeText(document.getElementById('editManufacturerInput')?.value),
         model: normalizeText(document.getElementById('editModelInput')?.value),
         serial_number: normalizeText(document.getElementById('editSerialInput')?.value),
-        calibration_due: normalizeText(document.getElementById('editCalibrationInput')?.value),
+        calibration_date: normalizeText(document.getElementById('editCalibrationDateInput')?.value),
+        next_calibration_date: normalizeText(document.getElementById('editNextCalibrationDateInput')?.value),
+        status: normalizeText(document.getElementById('editStatusInput')?.value),
+        notes: normalizeText(document.getElementById('editNotesInput')?.value),
+      };
+    });
+    document.getElementById(id)?.addEventListener('change', () => {
+      state.editDraft = {
+        ...state.editDraft,
+        tag: normalizeText(document.getElementById('editTagInput')?.value),
+        name: normalizeText(document.getElementById('editNameInput')?.value),
+        equipment_type: normalizeText(document.getElementById('editTypeInput')?.value),
+        sector: normalizeText(document.getElementById('editSectorInput')?.value),
+        location: normalizeText(document.getElementById('editLocationInput')?.value),
+        manufacturer: normalizeText(document.getElementById('editManufacturerInput')?.value),
+        model: normalizeText(document.getElementById('editModelInput')?.value),
+        serial_number: normalizeText(document.getElementById('editSerialInput')?.value),
+        calibration_date: normalizeText(document.getElementById('editCalibrationDateInput')?.value),
+        next_calibration_date: normalizeText(document.getElementById('editNextCalibrationDateInput')?.value),
         status: normalizeText(document.getElementById('editStatusInput')?.value),
         notes: normalizeText(document.getElementById('editNotesInput')?.value),
       };
@@ -901,7 +934,8 @@ function bindEvents() {
     form.append('manufacturer', state.editDraft.manufacturer || '');
     form.append('model', state.editDraft.model || '');
     form.append('serial_number', state.editDraft.serial_number || '');
-    form.append('calibration_due', state.editDraft.calibration_due || '');
+    form.append('calibration_date', state.editDraft.calibration_date || '');
+    form.append('next_calibration_date', state.editDraft.next_calibration_date || '');
     form.append('status', state.editDraft.status || 'Ativo');
     form.append('notes', state.editDraft.notes || '');
 
@@ -973,7 +1007,8 @@ window.startEditItem = function(id) {
     manufacturer: item.manufacturer || '',
     model: item.model || '',
     serial_number: item.serial_number || '',
-    calibration_due: item.calibration_due || '',
+    calibration_date: item.calibration_date || '',
+    next_calibration_date: item.next_calibration_date || '',
     status: item.status || 'Ativo',
     notes: item.notes || '',
     photoFile: null,
