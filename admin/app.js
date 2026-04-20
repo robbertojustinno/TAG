@@ -286,7 +286,8 @@ function normalizeItem(raw) {
     calibration_date: raw.calibration_date ?? '',
     next_calibration_date: raw.next_calibration_date ?? '',
     status: raw.status ?? t('active'),
-    notes: raw.notes ?? ''
+    notes: raw.notes ?? '',
+    qr_payload: raw.qr_payload ?? ''
   };
 }
 
@@ -392,6 +393,19 @@ function viewerUrlForTag(tag) {
   return url.toString();
 }
 
+function buildQrPayload(item) {
+  if (item.qr_payload && String(item.qr_payload).trim()) {
+    return String(item.qr_payload).trim();
+  }
+
+  return `TAGCHECK | MODO HIBRIDO
+TAG: ${item.tag}
+NOME: ${item.name}
+TIPO: ${item.equipment_type || '-'}
+CALIBRACAO: ${item.next_calibration_date || item.calibration_date || '-'}
+DADOS MINIMOS PORQUE TA OFFLINE`;
+}
+
 function qrHtml(tag) {
   const qrId = `qr-${String(tag).replace(/[^a-zA-Z0-9_-]/g, '')}`;
   return `
@@ -441,7 +455,6 @@ function searchResultHtml() {
 }
 
 function createAdditionalFields(prefix, values) {
-  const isEdit = prefix === 'edit';
   const calibrationType = 'date';
   const nextCalibrationType = 'date';
 
@@ -977,15 +990,6 @@ function bindEvents() {
     state.deleteTargetId = null;
     renderApp();
   });
-}
-
-function buildQrPayload(item) {
-  return `TAGCHECK | MODO HIBRIDO
-TAG: ${item.tag}
-NOME: ${item.name}
-TIPO: ${item.equipment_type || '-'}
-CALIBRACAO: ${item.next_calibration_date || item.calibration_date || '-'}
-DADOS MINIMOS PORQUE TA OFFLINE`;
 }
 
 function renderQRCodes() {
