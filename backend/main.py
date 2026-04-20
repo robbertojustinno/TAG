@@ -5,7 +5,7 @@ import cloudinary
 import cloudinary.uploader
 import os
 
-from sqlalchemy import create_engine, Column, Integer, String
+from sqlalchemy import create_engine, Column, Integer, String, Text, inspect, text
 from sqlalchemy.orm import sessionmaker, declarative_base
 
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -32,8 +32,45 @@ class Equipment(Base):
     name = Column(String, nullable=False)
     photo = Column(String, nullable=False)
 
+    equipment_type = Column(String, nullable=True)
+    sector = Column(String, nullable=True)
+    location = Column(String, nullable=True)
+    manufacturer = Column(String, nullable=True)
+    model = Column(String, nullable=True)
+    serial_number = Column(String, nullable=True)
+    calibration_due = Column(String, nullable=True)
+    status = Column(String, nullable=True)
+    notes = Column(Text, nullable=True)
+
 
 Base.metadata.create_all(bind=engine)
+
+
+def ensure_extra_columns() -> None:
+    inspector = inspect(engine)
+    existing_columns = {col["name"] for col in inspector.get_columns("tagcheck_equipment")}
+
+    wanted_columns = {
+        "equipment_type": "VARCHAR",
+        "sector": "VARCHAR",
+        "location": "VARCHAR",
+        "manufacturer": "VARCHAR",
+        "model": "VARCHAR",
+        "serial_number": "VARCHAR",
+        "calibration_due": "VARCHAR",
+        "status": "VARCHAR",
+        "notes": "TEXT",
+    }
+
+    with engine.begin() as connection:
+        for column_name, column_type in wanted_columns.items():
+            if column_name not in existing_columns:
+                connection.execute(
+                    text(f'ALTER TABLE tagcheck_equipment ADD COLUMN "{column_name}" {column_type}')
+                )
+
+
+ensure_extra_columns()
 
 app = FastAPI()
 
@@ -63,6 +100,15 @@ def serialize_equipment(item: Equipment) -> dict:
         "tag": item.tag,
         "name": item.name,
         "photo": item.photo,
+        "equipment_type": item.equipment_type or "",
+        "sector": item.sector or "",
+        "location": item.location or "",
+        "manufacturer": item.manufacturer or "",
+        "model": item.model or "",
+        "serial_number": item.serial_number or "",
+        "calibration_due": item.calibration_due or "",
+        "status": item.status or "Ativo",
+        "notes": item.notes or "",
     }
 
 
@@ -103,6 +149,15 @@ async def create_equipment(
     tag: str = Form(...),
     name: str = Form(...),
     photo: UploadFile = File(...),
+    equipment_type: str = Form(""),
+    sector: str = Form(""),
+    location: str = Form(""),
+    manufacturer: str = Form(""),
+    model: str = Form(""),
+    serial_number: str = Form(""),
+    calibration_due: str = Form(""),
+    status: str = Form("Ativo"),
+    notes: str = Form(""),
     _auth: str = Depends(require_admin),
 ):
     if not tag.strip():
@@ -131,6 +186,15 @@ async def create_equipment(
             tag=tag.strip(),
             name=name.strip(),
             photo=image_url,
+            equipment_type=equipment_type.strip(),
+            sector=sector.strip(),
+            location=location.strip(),
+            manufacturer=manufacturer.strip(),
+            model=model.strip(),
+            serial_number=serial_number.strip(),
+            calibration_due=calibration_due.strip(),
+            status=status.strip() or "Ativo",
+            notes=notes.strip(),
         )
         db.add(item)
         db.commit()
@@ -180,6 +244,15 @@ async def update_equipment(
     tag: str = Form(...),
     name: str = Form(...),
     photo: UploadFile | None = File(None),
+    equipment_type: str = Form(""),
+    sector: str = Form(""),
+    location: str = Form(""),
+    manufacturer: str = Form(""),
+    model: str = Form(""),
+    serial_number: str = Form(""),
+    calibration_due: str = Form(""),
+    status: str = Form("Ativo"),
+    notes: str = Form(""),
     _auth: str = Depends(require_admin),
 ):
     db = SessionLocal()
@@ -197,6 +270,15 @@ async def update_equipment(
 
         item.tag = tag.strip()
         item.name = name.strip()
+        item.equipment_type = equipment_type.strip()
+        item.sector = sector.strip()
+        item.location = location.strip()
+        item.manufacturer = manufacturer.strip()
+        item.model = model.strip()
+        item.serial_number = serial_number.strip()
+        item.calibration_due = calibration_due.strip()
+        item.status = status.strip() or "Ativo"
+        item.notes = notes.strip()
 
         if photo and photo.filename:
             result = cloudinary.uploader.upload(
