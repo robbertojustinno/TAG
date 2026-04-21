@@ -676,7 +676,10 @@ function renderApp(notice = '') {
       ${renderDeleteConfirm()}
 
       <div class="card panel">
-        <h3>${t('listTitle')}</h3>
+        <div class="inline-actions" style="justify-content: space-between; align-items: center;">
+          <h3>${t('listTitle')}</h3>
+          <button id="pdfButton" class="outline-button" type="button">Gerar PDF QR</button>
+        </div>
         <div class="table-wrap">
           <table>
             <thead>
@@ -873,6 +876,11 @@ function bindEvents() {
       feedback.innerHTML = `<div class="notice error">${escapeHtml(error.message || t('listError'))}</div>`;
     }
   });
+
+  document.getElementById('pdfButton')?.addEventListener('click', () => {
+    window.open(`${CONFIG.API_BASE_URL}/equipment/pdf-labels`, '_blank', 'noopener,noreferrer');
+  });
+
 
   document.getElementById('editPhotoInput')?.addEventListener('change', (event) => {
     const file = event.target.files?.[0];
