@@ -460,5 +460,8 @@ def equipment_pdf_labels():
             media_type="application/pdf",
             headers={"Content-Disposition": "inline; filename=etiquetas_qr.pdf"},
         )
+        
+        # FORÇA GIT
+print("PDF TESTE ATIVO")
     finally:
         db.close()

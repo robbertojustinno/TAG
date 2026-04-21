@@ -2,275 +2,49 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1, viewport-fit=cover"
-  />
-  <title>TagCheck V3 • Admin</title>
-  <link rel="stylesheet" href="/styles.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TagCheck Admin</title>
+  <link rel="stylesheet" href="./styles.css" />
+  <link rel="icon" type="image/png" href="./public/favicon.png">
+<link rel="apple-touch-icon" href="./public/favicon.png">
 </head>
 <body>
   <div class="app-shell">
-    <aside class="sidebar" id="sidebar">
+    <header class="topbar card">
       <div class="brand">
-        <div class="brand-mark">TC</div>
-        <div class="brand-text">
-          <strong>TagCheck V3</strong>
-          <span>Admin profissional</span>
+        <img src="./public/logo.png" alt="Just Engine" class="brand-logo" />
+        <div>
+          <h1 id="brandTitle">TagCheck • Smart Asset Tracking</h1>
+          <p id="brandSubtitle">Powered by Just Engine™ ⚡</p>
         </div>
       </div>
 
-      <nav class="nav">
-        <button class="nav-link active" data-section-target="dashboardSection">
-          <span class="nav-icon">📊</span>
-          <span>Dashboard</span>
-        </button>
-        <button class="nav-link" data-section-target="equipmentsSection">
-          <span class="nav-icon">🏷️</span>
-          <span>Instrumentos</span>
-        </button>
-        <button class="nav-link" data-section-target="alertsSection">
-          <span class="nav-icon">🚨</span>
-          <span>Alertas</span>
-        </button>
-      </nav>
-
-      <div class="sidebar-footer">
-        <div class="sidebar-mini-card">
-          <small>Ambiente</small>
-          <strong>Render + FastAPI</strong>
-        </div>
+      <div class="topbar-actions">
+        <button id="langPt" class="secondary-button lang-button active">PT</button>
+        <button id="langEn" class="outline-button lang-button">EN</button>
+        <a id="openViewerButton" class="secondary-button" href="#" target="_blank" rel="noopener noreferrer">Viewer</a>
+        <button id="logoutButton" class="outline-button hidden">Sair</button>
       </div>
-    </aside>
+    </header>
 
-    <main class="main-content">
-      <header class="topbar">
-        <div class="topbar-left">
-          <button class="mobile-menu-btn" id="mobileMenuBtn" type="button">☰</button>
-          <div>
-            <h1>Painel Administrativo</h1>
-            <p>Controle visual e rápido do TagCheck V3</p>
-          </div>
-        </div>
-
-        <div class="topbar-right">
-          <button class="ghost-btn" id="refreshDashboardBtn" type="button">Atualizar</button>
-        </div>
-      </header>
-
-      <section class="section active" id="dashboardSection">
-        <div class="hero-card">
-          <div class="hero-copy">
-            <div class="eyebrow">VISÃO GERAL</div>
-            <h2>Status de calibração em tempo real</h2>
-            <p>
-              Monitore instrumentos ativos, vencidos e próximos da calibração
-              com leitura rápida, visual limpo e foco total no uso mobile.
-            </p>
-          </div>
-          <div class="hero-status">
-            <div class="hero-status-pill ok">Sistema online</div>
-            <div class="hero-status-note" id="lastUpdateLabel">Última atualização: --</div>
-          </div>
-        </div>
-
-        <div class="stats-grid">
-          <article class="metric-card">
-            <div class="metric-label">Total</div>
-            <div class="metric-value" id="metricTotal">0</div>
-            <div class="metric-helper">Instrumentos cadastrados</div>
-          </article>
-
-          <article class="metric-card success">
-            <div class="metric-label">Ativos</div>
-            <div class="metric-value" id="metricActive">0</div>
-            <div class="metric-helper">Dentro da validade</div>
-          </article>
-
-          <article class="metric-card warning">
-            <div class="metric-label">Próximos</div>
-            <div class="metric-value" id="metricSoon">0</div>
-            <div class="metric-helper">Próximos da calibração</div>
-          </article>
-
-          <article class="metric-card danger">
-            <div class="metric-label">Vencidos</div>
-            <div class="metric-value" id="metricExpired">0</div>
-            <div class="metric-helper">Exigem atenção imediata</div>
-          </article>
-        </div>
-
-        <div class="dashboard-panels">
-          <article class="panel">
-            <div class="panel-head">
-              <div>
-                <h3>Resumo rápido</h3>
-                <p>Leitura operacional do parque de instrumentos</p>
-              </div>
-            </div>
-
-            <div class="summary-list" id="summaryList">
-              <div class="summary-item">
-                <span>Instrumentos com foto</span>
-                <strong id="summaryWithPhoto">0</strong>
-              </div>
-              <div class="summary-item">
-                <span>Instrumentos sem foto</span>
-                <strong id="summaryWithoutPhoto">0</strong>
-              </div>
-              <div class="summary-item">
-                <span>Com QR Code</span>
-                <strong id="summaryWithQr">0</strong>
-              </div>
-              <div class="summary-item">
-                <span>Sem QR Code</span>
-                <strong id="summaryWithoutQr">0</strong>
-              </div>
-            </div>
-          </article>
-
-          <article class="panel">
-            <div class="panel-head">
-              <div>
-                <h3>Alertas prioritários</h3>
-                <p>Itens que exigem ação mais rápida</p>
-              </div>
-            </div>
-
-            <div class="alert-stack" id="priorityAlerts">
-              <div class="empty-state small">Carregando alertas...</div>
-            </div>
-          </article>
-        </div>
-      </section>
-
-      <section class="section" id="equipmentsSection">
-        <div class="panel">
-          <div class="panel-head">
-            <div>
-              <h3>Instrumentos</h3>
-              <p>Busca, filtro e leitura rápida dos registros</p>
-            </div>
-          </div>
-
-          <form class="filters-grid" id="filtersForm">
-            <div class="field">
-              <label for="searchInput">Buscar por tag, nome, setor ou modelo</label>
-              <input
-                id="searchInput"
-                type="text"
-                placeholder="Ex.: TESTE-001, manômetro, laboratório..."
-              />
-            </div>
-
-            <div class="field">
-              <label for="statusFilter">Status de calibração</label>
-              <select id="statusFilter">
-                <option value="all">Todos</option>
-                <option value="active">Ativos</option>
-                <option value="soon">Próximos</option>
-                <option value="expired">Vencidos</option>
-              </select>
-            </div>
-
-            <div class="field">
-              <label for="photoFilter">Foto</label>
-              <select id="photoFilter">
-                <option value="all">Todos</option>
-                <option value="with_photo">Com foto</option>
-                <option value="without_photo">Sem foto</option>
-              </select>
-            </div>
-
-            <div class="field field-actions">
-              <button class="primary-btn" type="submit">Aplicar filtros</button>
-              <button class="ghost-btn" type="button" id="clearFiltersBtn">Limpar</button>
-            </div>
-          </form>
-        </div>
-
-        <div class="list-toolbar">
-          <div class="list-info">
-            <strong id="listCountLabel">0 registros</strong>
-            <span id="listMetaLabel">Sem filtros aplicados</span>
-          </div>
-        </div>
-
-        <div class="equipment-grid" id="equipmentGrid">
-          <div class="empty-state">Carregando instrumentos...</div>
-        </div>
-      </section>
-
-      <section class="section" id="alertsSection">
-        <div class="panel">
-          <div class="panel-head">
-            <div>
-              <h3>Alertas de calibração</h3>
-              <p>Lista dedicada para o controle operacional</p>
-            </div>
-          </div>
-
-          <div class="alert-list" id="alertsList">
-            <div class="empty-state">Carregando alertas...</div>
+    <main class="app-main" id="app">
+      <section class="screen">
+        <div class="card panel">
+          <div class="center-row">
+            <div class="loader"></div>
+            <span>Carregando Admin...</span>
           </div>
         </div>
       </section>
     </main>
   </div>
 
-  <div class="drawer-backdrop" id="drawerBackdrop"></div>
 
-  <template id="equipmentCardTemplate">
-    <article class="equipment-card">
-      <div class="equipment-card-top">
-        <div class="equipment-thumb-wrap">
-          <img class="equipment-thumb" alt="Foto do instrumento" />
-          <div class="equipment-thumb-fallback">SEM FOTO</div>
-        </div>
-
-        <div class="equipment-main">
-          <div class="equipment-title-row">
-            <h4 class="equipment-name"></h4>
-            <span class="badge calibration-badge"></span>
-          </div>
-
-          <div class="equipment-tag"></div>
-
-          <div class="equipment-meta"></div>
-        </div>
-      </div>
-
-      <div class="equipment-info-grid">
-        <div class="info-chip">
-          <span>Tipo</span>
-          <strong class="equipment-type">-</strong>
-        </div>
-        <div class="info-chip">
-          <span>Setor</span>
-          <strong class="equipment-sector">-</strong>
-        </div>
-        <div class="info-chip">
-          <span>Local</span>
-          <strong class="equipment-location">-</strong>
-        </div>
-        <div class="info-chip">
-          <span>Próx. calibração</span>
-          <strong class="equipment-next-calibration">-</strong>
-        </div>
-      </div>
-
-      <div class="equipment-actions">
-        <button class="ghost-btn btn-small view-json-btn" type="button">Ver dados</button>
-        <button class="primary-btn btn-small download-label-btn" type="button">Etiqueta PDF</button>
-      </div>
-
-      <details class="equipment-json">
-        <summary>Dados completos</summary>
-        <pre class="equipment-json-content"></pre>
-      </details>
-    </article>
-  </template>
-
-  <script src="/app.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode/1.5.1/qrcode.min.js"></script>
+  <script src="./config.js"></script>
+  <script src="./app.js"></script>
 </body>
+  <div class="footer-note">
+  Powered by Just Engine™ • Roberto Justino
+</div>
 </html>
