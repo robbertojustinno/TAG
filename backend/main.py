@@ -142,7 +142,7 @@ def serialize_equipment(item: Equipment) -> dict:
         "qr_payload": build_qr_payload(item),
     }
     
-    @app.get("/pdf/equipment-labels")
+
 def equipment_pdf_labels():
     return {"ok": True}
 
