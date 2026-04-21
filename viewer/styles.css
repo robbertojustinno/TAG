@@ -108,7 +108,7 @@ a { color: inherit; text-decoration: none; }
 .outline-button { background: transparent; color: var(--text); border: 1px solid var(--line); }
 .ghost-button { background: transparent; color: var(--text); width: 44px; padding: 0; }
 .hidden { display: none !important; }
-.panel { padding: 18px; display: grid; gap: 14px; }
+.panel { padding: 10px; display: grid; gap: 6px; }
 .search-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; }
 .stack { display: grid; gap: 10px; }
 .input, .textarea {
@@ -293,4 +293,49 @@ a { color: inherit; text-decoration: none; }
   .detail-photo {
     max-width: 180px;
   }
+}
+/* ===== AJUSTE FINO DE ESPAÇOS (VIEWER V3) ===== */
+
+/* reduz espaço entre blocos */
+.screen {
+  gap: 10px !important;
+  align-content: start !important;
+}
+
+/* reduz altura do topo */
+.hero {
+  padding: 14px !important;
+  gap: 8px !important;
+}
+
+/* reduz espaço interno dos cards */
+.panel {
+  padding: 10px !important;
+  gap: 6px !important;
+}
+
+/* evita crescimento vertical inútil */
+.card {
+  height: auto !important;
+}
+
+/* input mais compacto */
+.input {
+  min-height: 40px !important;
+}
+
+/* botão mais próximo */
+.primary-button {
+  min-height: 40px !important;
+  margin-top: 4px;
+}
+
+/* remove espaço morto da busca */
+.search-row {
+  gap: 6px !important;
+}
+
+/* reduz padding geral da tela */
+.app-shell {
+  padding: 10px 10px 20px !important;
 }
