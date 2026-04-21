@@ -379,7 +379,7 @@ def delete_equipment(
     finally:
         db.close()
 
-@app.get("/pdf/equipment-labels")
+@app.get("/equipment/pdf")
 def equipment_pdf_labels():
     db = SessionLocal()
     try:
