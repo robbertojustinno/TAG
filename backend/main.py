@@ -143,9 +143,6 @@ def serialize_equipment(item: Equipment) -> dict:
     }
     
 
-def equipment_pdf_labels():
-    return {"ok": True}
-
 
 def require_admin(authorization: str = Header(default=None)) -> str:
     expected = f"Bearer {ADMIN_TOKEN}"
@@ -464,3 +461,4 @@ def equipment_pdf_labels():
             headers={"Content-Disposition": "inline; filename=etiquetas_qr.pdf"},
         )
     finally:
+        db.close()
