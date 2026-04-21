@@ -141,6 +141,10 @@ def serialize_equipment(item: Equipment) -> dict:
         "notes": item.notes or "",
         "qr_payload": build_qr_payload(item),
     }
+    
+    @app.get("/pdf/equipment-labels")
+def equipment_pdf_labels():
+    return {"ok": True}
 
 
 def require_admin(authorization: str = Header(default=None)) -> str:
@@ -460,8 +464,3 @@ def equipment_pdf_labels():
             headers={"Content-Disposition": "inline; filename=etiquetas_qr.pdf"},
         )
     finally:
-        db.close()
-        
-        @app.get("/pdf/equipment-labels")
-def test_pdf():
-    return {"ok": True}
