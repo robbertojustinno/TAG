@@ -378,11 +378,6 @@ def delete_equipment(
     finally:
         db.close()
         
-        @app.get("/pdf/equipment-labels")
-def test_pdf():
-    return {"ok": True}
-
-
 @app.get("/pdf/equipment-labels")
 def equipment_pdf_labels():
     db = SessionLocal()
@@ -466,3 +461,7 @@ def equipment_pdf_labels():
         )
     finally:
         db.close()
+        
+        @app.get("/pdf/equipment-labels")
+def test_pdf():
+    return {"ok": True}
