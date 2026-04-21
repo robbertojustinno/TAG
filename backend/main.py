@@ -402,7 +402,7 @@ def equipment_pdf_labels():
         label_width = (page_width - (2 * margin_x) - ((cols - 1) * gap_x)) / cols
         label_height = (page_height - (2 * margin_y) - ((rows - 1) * gap_y)) / rows
 
-        qr_size = min(label_width * 0.62, label_height * 0.58)
+        qr_size = min(label_width * 0.75, label_height * 0.70)(label_width * 0.62, label_height * 0.58)
 
         for index, item in enumerate(items):
             page_index = index % (cols * rows)
@@ -437,10 +437,10 @@ def equipment_pdf_labels():
             )
 
             # TAG no topo do card
-            pdf.setFont("Helvetica-Bold", 9)
+            pdf.setFont("Helvetica-Bold", 10)
             pdf.drawCentredString(
                 x + (label_width / 2),
-                y + label_height - 4 * mm,
+                y + label_height - 5 * mm,
                 (item.tag or "-")[:28]
             )
 
