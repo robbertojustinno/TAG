@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Depends
+﻿from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -379,7 +379,7 @@ def delete_equipment(
     finally:
         db.close()
 
-@app.get("/pdf/equipment-labels")
+@app.get("/equipment/pdf")
 def equipment_pdf_labels():
     db = SessionLocal()
     try:
