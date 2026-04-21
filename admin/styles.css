@@ -668,3 +668,51 @@ canvas {
     height: 60px;
   }
 }
+
+/* ===== AJUSTE DE ESPAÇOS DO ADMIN ===== */
+
+/* reduz espaço entre blocos */
+.screen {
+  gap: 10px !important;
+  align-content: start !important;
+}
+
+/* reduz altura do bloco principal */
+.hero {
+  padding: 14px !important;
+  gap: 8px !important;
+}
+
+/* cards mais compactos */
+.panel {
+  padding: 10px !important;
+  gap: 6px !important;
+}
+
+/* evita crescimento vertical desnecessário */
+.card {
+  height: auto !important;
+}
+
+/* área de busca mais compacta */
+.search-row {
+  gap: 6px !important;
+  margin-bottom: 4px !important;
+}
+
+/* input menor */
+.input {
+  min-height: 40px !important;
+  margin-bottom: 4px !important;
+}
+
+/* botão menor e mais próximo */
+.primary-button {
+  min-height: 40px !important;
+  margin-top: 4px !important;
+}
+
+/* padding geral da tela menor */
+.app-shell {
+  padding: 10px 10px 20px !important;
+}
