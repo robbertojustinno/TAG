@@ -5,3 +5,4 @@ cloudinary
 sqlalchemy
 psycopg2-binary
 reportlab==4.2.0
+qrcode[pil]
