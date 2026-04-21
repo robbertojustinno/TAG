@@ -878,7 +878,7 @@ function bindEvents() {
   });
 
   document.getElementById('pdfButton')?.addEventListener('click', () => {
-    window.open(`${CONFIG.API_BASE_URL}/pdf/equipment/pdf-labels`, '_blank', 'noopener,noreferrer');
+    window.open(`${CONFIG.API_BASE_URL}/pdf/equipment-labels`, '_blank', 'noopener,noreferrer');
   });
 
 

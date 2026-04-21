@@ -379,7 +379,7 @@ def delete_equipment(
         db.close()
 
 
-@app.get("/equipment/pdf-labels")
+@app.get("/pdf/equipment-labels")
 def equipment_pdf_labels():
     db = SessionLocal()
     try:
@@ -425,11 +425,25 @@ def equipment_pdf_labels():
 
             qr_x = x + (label_width - qr_size) / 2
             qr_y = y + label_height - qr_size - 5 * mm
-            pdf.drawImage(ImageReader(qr_buffer), qr_x, qr_y, qr_size, qr_size, preserveAspectRatio=True, mask='auto')
+
+            pdf.drawImage(
+                ImageReader(qr_buffer),
+                qr_x,
+                qr_y,
+                qr_size,
+                qr_size,
+                preserveAspectRatio=True,
+                mask='auto'
+            )
 
             text_y = qr_y - 4 * mm
+
             pdf.setFont("Helvetica-Bold", 7)
-            pdf.drawCentredString(x + (label_width / 2), text_y, (item.tag or "-")[:28])
+            pdf.drawCentredString(
+                x + (label_width / 2),
+                text_y,
+                (item.tag or "-")[:28]
+            )
 
             pdf.setFont("Helvetica", 6)
             pdf.drawCentredString(
