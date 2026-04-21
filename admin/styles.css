@@ -755,3 +755,26 @@ textarea {
 .screen {
   align-items: start !important;
 }
+
+/* ===== CORREÇÃO DO TAMANHO DO CARD DE BUSCA ===== */
+
+/* impede o card de crescer verticalmente */
+.card.panel {
+  height: auto !important;
+  min-height: unset !important;
+}
+
+/* ESSA LINHA É A CHAVE */
+.screen {
+  align-content: start !important;
+}
+
+/* evita que o card ocupe altura total */
+.panel {
+  align-self: start !important;
+}
+
+/* remove sobra interna */
+.card.panel {
+  padding-bottom: 12px !important;
+}
