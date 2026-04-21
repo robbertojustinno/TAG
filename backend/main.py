@@ -1,12 +1,20 @@
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import cloudinary
 import cloudinary.uploader
 import os
+from io import BytesIO
 
 from sqlalchemy import create_engine, Column, Integer, String, Text, inspect, text
 from sqlalchemy.orm import sessionmaker, declarative_base
+
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import mm
+from reportlab.lib.utils import ImageReader
+from reportlab.pdfgen import canvas
+import qrcode
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
@@ -96,6 +104,25 @@ class LoginPayload(BaseModel):
     password: str
 
 
+def build_qr_payload(item: Equipment) -> str:
+    calibration_value = (
+        (item.next_calibration_date or "").strip()
+        or (item.calibration_date or "").strip()
+        or "-"
+    )
+
+    equipment_type = (item.equipment_type or "").strip() or "-"
+
+    return (
+        f"TAGCHECK | MODO HIBRIDO\n"
+        f"TAG: {item.tag}\n"
+        f"NOME: {item.name}\n"
+        f"TIPO: {equipment_type}\n"
+        f"CALIBRACAO: {calibration_value}\n"
+        f"DADOS MINIMOS PORQUE TA OFFLINE"
+    )
+
+
 def serialize_equipment(item: Equipment) -> dict:
     return {
         "id": item.id,
@@ -112,6 +139,7 @@ def serialize_equipment(item: Equipment) -> dict:
         "next_calibration_date": item.next_calibration_date or "",
         "status": item.status or "Ativo",
         "notes": item.notes or "",
+        "qr_payload": build_qr_payload(item),
     }
 
 
@@ -243,6 +271,23 @@ def get_by_tag(tag: str):
         db.close()
 
 
+@app.get("/equipment/{id}/qr-payload")
+def get_qr_payload(id: int):
+    db = SessionLocal()
+    try:
+        item = db.query(Equipment).filter(Equipment.id == id).first()
+        if not item:
+            raise HTTPException(status_code=404, detail="Equipamento não encontrado.")
+
+        return {
+            "id": item.id,
+            "tag": item.tag,
+            "qr_payload": build_qr_payload(item),
+        }
+    finally:
+        db.close()
+
+
 @app.put("/equipment/{id}")
 async def update_equipment(
     id: int,
@@ -330,5 +375,76 @@ def delete_equipment(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Erro ao excluir equipamento: {str(e)}")
+    finally:
+        db.close()
+
+
+@app.get("/equipment/pdf-labels")
+def equipment_pdf_labels():
+    db = SessionLocal()
+    try:
+        items = db.query(Equipment).order_by(Equipment.id.asc()).all()
+
+        if not items:
+            raise HTTPException(status_code=404, detail="Nenhum equipamento cadastrado.")
+
+        buffer = BytesIO()
+        pdf = canvas.Canvas(buffer, pagesize=A4)
+        page_width, page_height = A4
+
+        cols = 4
+        rows = 8
+        margin_x = 8 * mm
+        margin_y = 10 * mm
+        gap_x = 4 * mm
+        gap_y = 6 * mm
+
+        label_width = (page_width - (2 * margin_x) - ((cols - 1) * gap_x)) / cols
+        label_height = (page_height - (2 * margin_y) - ((rows - 1) * gap_y)) / rows
+
+        qr_size = min(label_width * 0.62, label_height * 0.58)
+
+        for index, item in enumerate(items):
+            page_index = index % (cols * rows)
+            col = page_index % cols
+            row = page_index // cols
+
+            if index > 0 and page_index == 0:
+                pdf.showPage()
+
+            x = margin_x + col * (label_width + gap_x)
+            y = page_height - margin_y - ((row + 1) * label_height) - (row * gap_y)
+
+            pdf.roundRect(x, y, label_width, label_height, 4 * mm, stroke=1, fill=0)
+
+            payload = build_qr_payload(item)
+            qr_img = qrcode.make(payload)
+            qr_buffer = BytesIO()
+            qr_img.save(qr_buffer, format="PNG")
+            qr_buffer.seek(0)
+
+            qr_x = x + (label_width - qr_size) / 2
+            qr_y = y + label_height - qr_size - 5 * mm
+            pdf.drawImage(ImageReader(qr_buffer), qr_x, qr_y, qr_size, qr_size, preserveAspectRatio=True, mask='auto')
+
+            text_y = qr_y - 4 * mm
+            pdf.setFont("Helvetica-Bold", 7)
+            pdf.drawCentredString(x + (label_width / 2), text_y, (item.tag or "-")[:28])
+
+            pdf.setFont("Helvetica", 6)
+            pdf.drawCentredString(
+                x + (label_width / 2),
+                text_y - 3.5 * mm,
+                ((item.name or "-")[:30])
+            )
+
+        pdf.save()
+        buffer.seek(0)
+
+        return StreamingResponse(
+            buffer,
+            media_type="application/pdf",
+            headers={"Content-Disposition": "inline; filename=etiquetas_qr.pdf"},
+        )
     finally:
         db.close()
