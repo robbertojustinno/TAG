@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Depends
+﻿from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -18,7 +18,7 @@ import qrcode
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
-    raise RuntimeError("DATABASE_URL não configurada")
+    raise RuntimeError("DATABASE_URL nÃ£o configurada")
 
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
@@ -147,7 +147,7 @@ def serialize_equipment(item: Equipment) -> dict:
 def require_admin(authorization: str = Header(default=None)) -> str:
     expected = f"Bearer {ADMIN_TOKEN}"
     if authorization != expected:
-        raise HTTPException(status_code=401, detail="Não autorizado.")
+        raise HTTPException(status_code=401, detail="NÃ£o autorizado.")
     return authorization
 
 
@@ -167,7 +167,7 @@ def login(payload: LoginPayload):
     password = payload.password or ""
 
     if username != ADMIN_USERNAME or password != ADMIN_PASSWORD:
-        raise HTTPException(status_code=401, detail="Usuário ou senha inválidos.")
+        raise HTTPException(status_code=401, detail="UsuÃ¡rio ou senha invÃ¡lidos.")
 
     return {
         "ok": True,
@@ -194,17 +194,17 @@ async def create_equipment(
     _auth: str = Depends(require_admin),
 ):
     if not tag.strip():
-        raise HTTPException(status_code=400, detail="TAG é obrigatória.")
+        raise HTTPException(status_code=400, detail="TAG Ã© obrigatÃ³ria.")
     if not name.strip():
-        raise HTTPException(status_code=400, detail="Nome é obrigatório.")
+        raise HTTPException(status_code=400, detail="Nome Ã© obrigatÃ³rio.")
     if not photo or not photo.filename:
-        raise HTTPException(status_code=400, detail="Foto é obrigatória.")
+        raise HTTPException(status_code=400, detail="Foto Ã© obrigatÃ³ria.")
 
     db = SessionLocal()
     try:
         existing = db.query(Equipment).filter(Equipment.tag == tag.strip()).first()
         if existing:
-            raise HTTPException(status_code=400, detail="TAG já cadastrada.")
+            raise HTTPException(status_code=400, detail="TAG jÃ¡ cadastrada.")
 
         result = cloudinary.uploader.upload(
             photo.file,
@@ -262,7 +262,7 @@ def get_by_tag(tag: str):
         clean_tag = tag.strip()
         item = db.query(Equipment).filter(Equipment.tag == clean_tag).first()
         if not item:
-            raise HTTPException(status_code=404, detail="Equipamento não encontrado.")
+            raise HTTPException(status_code=404, detail="Equipamento nÃ£o encontrado.")
         return serialize_equipment(item)
     except HTTPException:
         raise
@@ -278,7 +278,7 @@ def get_qr_payload(id: int):
     try:
         item = db.query(Equipment).filter(Equipment.id == id).first()
         if not item:
-            raise HTTPException(status_code=404, detail="Equipamento não encontrado.")
+            raise HTTPException(status_code=404, detail="Equipamento nÃ£o encontrado.")
 
         return {
             "id": item.id,
@@ -311,14 +311,14 @@ async def update_equipment(
     try:
         item = db.query(Equipment).filter(Equipment.id == id).first()
         if not item:
-            raise HTTPException(status_code=404, detail="Equipamento não encontrado.")
+            raise HTTPException(status_code=404, detail="Equipamento nÃ£o encontrado.")
 
         duplicated = db.query(Equipment).filter(
             Equipment.tag == tag.strip(),
             Equipment.id != id
         ).first()
         if duplicated:
-            raise HTTPException(status_code=400, detail="TAG já cadastrada em outro equipamento.")
+            raise HTTPException(status_code=400, detail="TAG jÃ¡ cadastrada em outro equipamento.")
 
         item.tag = tag.strip()
         item.name = name.strip()
@@ -365,7 +365,7 @@ def delete_equipment(
     try:
         item = db.query(Equipment).filter(Equipment.id == id).first()
         if not item:
-            raise HTTPException(status_code=404, detail="Equipamento não encontrado.")
+            raise HTTPException(status_code=404, detail="Equipamento nÃ£o encontrado.")
 
         db.delete(item)
         db.commit()
@@ -378,7 +378,7 @@ def delete_equipment(
         raise HTTPException(status_code=500, detail=f"Erro ao excluir equipamento: {str(e)}")
     finally:
         db.close()
-        
+
 @app.get("/pdf/equipment-labels")
 def equipment_pdf_labels():
     db = SessionLocal()
