@@ -96,25 +96,6 @@ class LoginPayload(BaseModel):
     password: str
 
 
-def build_qr_payload(item: Equipment) -> str:
-    calibration_value = (
-        (item.next_calibration_date or "").strip()
-        or (item.calibration_date or "").strip()
-        or "-"
-    )
-
-    equipment_type = (item.equipment_type or "").strip() or "-"
-
-    return (
-        f"TAGCHECK | MODO HIBRIDO\n"
-        f"TAG: {item.tag}\n"
-        f"NOME: {item.name}\n"
-        f"TIPO: {equipment_type}\n"
-        f"CALIBRACAO: {calibration_value}\n"
-        f"DADOS MINIMOS PORQUE TA OFFLINE"
-    )
-
-
 def serialize_equipment(item: Equipment) -> dict:
     return {
         "id": item.id,
@@ -131,7 +112,6 @@ def serialize_equipment(item: Equipment) -> dict:
         "next_calibration_date": item.next_calibration_date or "",
         "status": item.status or "Ativo",
         "notes": item.notes or "",
-        "qr_payload": build_qr_payload(item),
     }
 
 
@@ -259,23 +239,6 @@ def get_by_tag(tag: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao buscar TAG: {str(e)}")
-    finally:
-        db.close()
-
-
-@app.get("/equipment/{id}/qr-payload")
-def get_qr_payload(id: int):
-    db = SessionLocal()
-    try:
-        item = db.query(Equipment).filter(Equipment.id == id).first()
-        if not item:
-            raise HTTPException(status_code=404, detail="Equipamento não encontrado.")
-
-        return {
-            "id": item.id,
-            "tag": item.tag,
-            "qr_payload": build_qr_payload(item),
-        }
     finally:
         db.close()
 
