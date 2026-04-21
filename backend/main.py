@@ -424,7 +424,7 @@ def equipment_pdf_labels():
             qr_buffer.seek(0)
 
             qr_x = x + (label_width - qr_size) / 2
-            qr_y = y + label_height - qr_size - 5 * mm
+            qr_y = y + (label_height - qr_size) / 2 - 2 * mm
 
             pdf.drawImage(
                 ImageReader(qr_buffer),
@@ -436,20 +436,12 @@ def equipment_pdf_labels():
                 mask='auto'
             )
 
-            text_y = qr_y - 4 * mm
-
-            pdf.setFont("Helvetica-Bold", 7)
+            # TAG no topo do card
+            pdf.setFont("Helvetica-Bold", 9)
             pdf.drawCentredString(
                 x + (label_width / 2),
-                text_y,
+                y + label_height - 4 * mm,
                 (item.tag or "-")[:28]
-            )
-
-            pdf.setFont("Helvetica", 6)
-            pdf.drawCentredString(
-                x + (label_width / 2),
-                text_y - 3.5 * mm,
-                ((item.name or "-")[:30])
             )
 
         pdf.save()
