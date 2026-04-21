@@ -1,16 +1,24 @@
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Depends
+﻿from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import cloudinary
 import cloudinary.uploader
 import os
+from io import BytesIO
 
 from sqlalchemy import create_engine, Column, Integer, String, Text, inspect, text
 from sqlalchemy.orm import sessionmaker, declarative_base
 
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import mm
+from reportlab.lib.utils import ImageReader
+from reportlab.pdfgen import canvas
+import qrcode
+
 DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
-    raise RuntimeError("DATABASE_URL não configurada")
+    raise RuntimeError("DATABASE_URL nÃ£o configurada")
 
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
@@ -96,6 +104,25 @@ class LoginPayload(BaseModel):
     password: str
 
 
+def build_qr_payload(item: Equipment) -> str:
+    calibration_value = (
+        (item.next_calibration_date or "").strip()
+        or (item.calibration_date or "").strip()
+        or "-"
+    )
+
+    equipment_type = (item.equipment_type or "").strip() or "-"
+
+    return (
+        f"TAGCHECK | MODO HIBRIDO\n"
+        f"TAG: {item.tag}\n"
+        f"NOME: {item.name}\n"
+        f"TIPO: {equipment_type}\n"
+        f"CALIBRACAO: {calibration_value}\n"
+        f"DADOS MINIMOS PORQUE TA OFFLINE"
+    )
+
+
 def serialize_equipment(item: Equipment) -> dict:
     return {
         "id": item.id,
@@ -112,13 +139,15 @@ def serialize_equipment(item: Equipment) -> dict:
         "next_calibration_date": item.next_calibration_date or "",
         "status": item.status or "Ativo",
         "notes": item.notes or "",
+        "qr_payload": build_qr_payload(item),
     }
+    
 
 
 def require_admin(authorization: str = Header(default=None)) -> str:
     expected = f"Bearer {ADMIN_TOKEN}"
     if authorization != expected:
-        raise HTTPException(status_code=401, detail="Não autorizado.")
+        raise HTTPException(status_code=401, detail="NÃ£o autorizado.")
     return authorization
 
 
@@ -138,7 +167,7 @@ def login(payload: LoginPayload):
     password = payload.password or ""
 
     if username != ADMIN_USERNAME or password != ADMIN_PASSWORD:
-        raise HTTPException(status_code=401, detail="Usuário ou senha inválidos.")
+        raise HTTPException(status_code=401, detail="UsuÃ¡rio ou senha invÃ¡lidos.")
 
     return {
         "ok": True,
@@ -165,17 +194,17 @@ async def create_equipment(
     _auth: str = Depends(require_admin),
 ):
     if not tag.strip():
-        raise HTTPException(status_code=400, detail="TAG é obrigatória.")
+        raise HTTPException(status_code=400, detail="TAG Ã© obrigatÃ³ria.")
     if not name.strip():
-        raise HTTPException(status_code=400, detail="Nome é obrigatório.")
+        raise HTTPException(status_code=400, detail="Nome Ã© obrigatÃ³rio.")
     if not photo or not photo.filename:
-        raise HTTPException(status_code=400, detail="Foto é obrigatória.")
+        raise HTTPException(status_code=400, detail="Foto Ã© obrigatÃ³ria.")
 
     db = SessionLocal()
     try:
         existing = db.query(Equipment).filter(Equipment.tag == tag.strip()).first()
         if existing:
-            raise HTTPException(status_code=400, detail="TAG já cadastrada.")
+            raise HTTPException(status_code=400, detail="TAG jÃ¡ cadastrada.")
 
         result = cloudinary.uploader.upload(
             photo.file,
@@ -233,12 +262,29 @@ def get_by_tag(tag: str):
         clean_tag = tag.strip()
         item = db.query(Equipment).filter(Equipment.tag == clean_tag).first()
         if not item:
-            raise HTTPException(status_code=404, detail="Equipamento não encontrado.")
+            raise HTTPException(status_code=404, detail="Equipamento nÃ£o encontrado.")
         return serialize_equipment(item)
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao buscar TAG: {str(e)}")
+    finally:
+        db.close()
+
+
+@app.get("/equipment/{id}/qr-payload")
+def get_qr_payload(id: int):
+    db = SessionLocal()
+    try:
+        item = db.query(Equipment).filter(Equipment.id == id).first()
+        if not item:
+            raise HTTPException(status_code=404, detail="Equipamento nÃ£o encontrado.")
+
+        return {
+            "id": item.id,
+            "tag": item.tag,
+            "qr_payload": build_qr_payload(item),
+        }
     finally:
         db.close()
 
@@ -265,14 +311,14 @@ async def update_equipment(
     try:
         item = db.query(Equipment).filter(Equipment.id == id).first()
         if not item:
-            raise HTTPException(status_code=404, detail="Equipamento não encontrado.")
+            raise HTTPException(status_code=404, detail="Equipamento nÃ£o encontrado.")
 
         duplicated = db.query(Equipment).filter(
             Equipment.tag == tag.strip(),
             Equipment.id != id
         ).first()
         if duplicated:
-            raise HTTPException(status_code=400, detail="TAG já cadastrada em outro equipamento.")
+            raise HTTPException(status_code=400, detail="TAG jÃ¡ cadastrada em outro equipamento.")
 
         item.tag = tag.strip()
         item.name = name.strip()
@@ -319,7 +365,7 @@ def delete_equipment(
     try:
         item = db.query(Equipment).filter(Equipment.id == id).first()
         if not item:
-            raise HTTPException(status_code=404, detail="Equipamento não encontrado.")
+            raise HTTPException(status_code=404, detail="Equipamento nÃ£o encontrado.")
 
         db.delete(item)
         db.commit()
@@ -330,5 +376,89 @@ def delete_equipment(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Erro ao excluir equipamento: {str(e)}")
+    finally:
+        db.close()
+
+@app.get("/pdf/equipment-labels")
+def equipment_pdf_labels():
+    db = SessionLocal()
+    try:
+        items = db.query(Equipment).order_by(Equipment.id.asc()).all()
+
+        if not items:
+            raise HTTPException(status_code=404, detail="Nenhum equipamento cadastrado.")
+
+        buffer = BytesIO()
+        pdf = canvas.Canvas(buffer, pagesize=A4)
+        page_width, page_height = A4
+
+        cols = 4
+        rows = 8
+        margin_x = 8 * mm
+        margin_y = 10 * mm
+        gap_x = 4 * mm
+        gap_y = 6 * mm
+
+        label_width = (page_width - (2 * margin_x) - ((cols - 1) * gap_x)) / cols
+        label_height = (page_height - (2 * margin_y) - ((rows - 1) * gap_y)) / rows
+
+        qr_size = min(label_width * 0.62, label_height * 0.58)
+
+        for index, item in enumerate(items):
+            page_index = index % (cols * rows)
+            col = page_index % cols
+            row = page_index // cols
+
+            if index > 0 and page_index == 0:
+                pdf.showPage()
+
+            x = margin_x + col * (label_width + gap_x)
+            y = page_height - margin_y - ((row + 1) * label_height) - (row * gap_y)
+
+            pdf.roundRect(x, y, label_width, label_height, 4 * mm, stroke=1, fill=0)
+
+            payload = build_qr_payload(item)
+            qr_img = qrcode.make(payload)
+            qr_buffer = BytesIO()
+            qr_img.save(qr_buffer, format="PNG")
+            qr_buffer.seek(0)
+
+            qr_x = x + (label_width - qr_size) / 2
+            qr_y = y + label_height - qr_size - 5 * mm
+
+            pdf.drawImage(
+                ImageReader(qr_buffer),
+                qr_x,
+                qr_y,
+                qr_size,
+                qr_size,
+                preserveAspectRatio=True,
+                mask='auto'
+            )
+
+            text_y = qr_y - 4 * mm
+
+            pdf.setFont("Helvetica-Bold", 7)
+            pdf.drawCentredString(
+                x + (label_width / 2),
+                text_y,
+                (item.tag or "-")[:28]
+            )
+
+            pdf.setFont("Helvetica", 6)
+            pdf.drawCentredString(
+                x + (label_width / 2),
+                text_y - 3.5 * mm,
+                ((item.name or "-")[:30])
+            )
+
+        pdf.save()
+        buffer.seek(0)
+
+        return StreamingResponse(
+            buffer,
+            media_type="application/pdf",
+            headers={"Content-Disposition": "inline; filename=etiquetas_qr.pdf"},
+        )
     finally:
         db.close()
