@@ -716,3 +716,42 @@ canvas {
 .app-shell {
   padding: 10px 10px 20px !important;
 }
+
+/* ===== CORREÇÃO DEFINITIVA DA BUSCA ===== */
+
+/* impede que o bloco cresça verticalmente */
+.panel {
+  align-content: start !important;
+}
+
+/* ESSA É A PRINCIPAL CORREÇÃO */
+textarea,
+.input,
+.search-input {
+  height: 45px !important;
+  min-height: 45px !important;
+  max-height: 45px !important;
+  resize: none !important;
+}
+
+/* se estiver usando textarea como input */
+textarea {
+  padding-top: 12px !important;
+}
+
+/* deixa botões alinhados corretamente */
+.search-row {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+/* remove aquele espaço absurdo abaixo */
+.card.panel {
+  padding-bottom: 12px !important;
+}
+
+/* garante que nada dentro expanda */
+.screen {
+  align-items: start !important;
+}
