@@ -1,4 +1,4 @@
-﻿from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Depends
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -379,7 +379,9 @@ def delete_equipment(
     finally:
         db.close()
 
-@app.get("/equipment/pdf")
+from fastapi.responses import StreamingResponse
+
+@app.get("/equipment/pdf", response_class=StreamingResponse)
 def equipment_pdf_labels():
     db = SessionLocal()
     try:
@@ -402,7 +404,7 @@ def equipment_pdf_labels():
         label_width = (page_width - (2 * margin_x) - ((cols - 1) * gap_x)) / cols
         label_height = (page_height - (2 * margin_y) - ((rows - 1) * gap_y)) / rows
 
-        qr_size = min(label_width * 0.62, label_height * 0.58)
+        qr_size = min(label_width * 0.75, label_height * 0.70)(label_width * 0.62, label_height * 0.58)
 
         for index, item in enumerate(items):
             page_index = index % (cols * rows)
@@ -424,7 +426,7 @@ def equipment_pdf_labels():
             qr_buffer.seek(0)
 
             qr_x = x + (label_width - qr_size) / 2
-            qr_y = y + label_height - qr_size - 5 * mm
+            qr_y = y + (label_height - qr_size) / 2 - 2 * mm
 
             pdf.drawImage(
                 ImageReader(qr_buffer),
@@ -436,20 +438,12 @@ def equipment_pdf_labels():
                 mask='auto'
             )
 
-            text_y = qr_y - 4 * mm
-
-            pdf.setFont("Helvetica-Bold", 7)
+            # TAG no topo do card
+            pdf.setFont("Helvetica-Bold", 10)
             pdf.drawCentredString(
                 x + (label_width / 2),
-                text_y,
+                y + label_height - 5 * mm,
                 (item.tag or "-")[:28]
-            )
-
-            pdf.setFont("Helvetica", 6)
-            pdf.drawCentredString(
-                x + (label_width / 2),
-                text_y - 3.5 * mm,
-                ((item.name or "-")[:30])
             )
 
         pdf.save()
