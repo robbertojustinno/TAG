@@ -677,7 +677,10 @@ function renderApp(notice = '') {
 
       <div class="card panel">
         <div class="inline-actions" style="justify-content: space-between; align-items: center;">
-          <h3>${t('listTitle')}</h3>
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+  <h3>${t('listTitle')}</h3>
+  <button class="primary-button" onclick="gerarPDF()">Gerar PDF QR</button>
+</div>
           <button id="pdfButton" class="outline-button" type="button">Gerar PDF QR</button>
         </div>
         <div class="table-wrap">
@@ -1095,7 +1098,9 @@ async function boot() {
     }
   }
 }
-
+function gerarPDF() {
+  window.open(`${CONFIG.API_BASE_URL}/equipment/pdf-labels`, "_blank");
+}
 document.getElementById('langPt').addEventListener('click', () => setLanguage('pt'));
 document.getElementById('langEn').addEventListener('click', () => setLanguage('en'));
 logoutButton.addEventListener('click', logoutAdmin);
