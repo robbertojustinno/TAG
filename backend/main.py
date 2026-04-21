@@ -377,6 +377,10 @@ def delete_equipment(
         raise HTTPException(status_code=500, detail=f"Erro ao excluir equipamento: {str(e)}")
     finally:
         db.close()
+        
+        @app.get("/pdf/equipment-labels")
+def test_pdf():
+    return {"ok": True}
 
 
 @app.get("/pdf/equipment-labels")
