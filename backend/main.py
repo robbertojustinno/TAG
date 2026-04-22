@@ -402,7 +402,7 @@ def equipment_pdf_labels():
         label_width = (page_width - (2 * margin_x) - ((cols - 1) * gap_x)) / cols
         label_height = (page_height - (2 * margin_y) - ((rows - 1) * gap_y)) / rows
 
-        qr_size = min(label_width * 0.75, label_height * 0.70)(label_width * 0.62, label_height * 0.58)
+        qr_size = min(label_width * 0.75, label_height * 0.70)
 
         for index, item in enumerate(items):
             page_index = index % (cols * rows)
