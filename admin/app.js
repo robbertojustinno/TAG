@@ -713,7 +713,7 @@ function renderApp(notice = '') {
         </div>
       </div>
 
-      <div class="footer-note">Admin V3 • login + QR + calibração + campos completos</div>
+      <div class="footer-note">Admin V3 • TagCheck • Smart Asset Tracking</div>
     </section>
   `;
 
