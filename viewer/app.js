@@ -349,19 +349,30 @@ function metaItem(label, value) {
 }
 
 function renderDadosTecnicos(item) {
+  const rows = [
+    ['TAG', item.tag],
+    ['Nome', item.name],
+    ['Tipo', item.type],
+    ['Setor', item.sector],
+    ['Localização', item.location],
+    ['Fabricante', item.manufacturer],
+    ['Modelo', item.model],
+    ['Nº de Série', item.serial],
+    ['Status', item.status],
+    ['Calibração', item.calibrationDate],
+    ['Validade', item.validityDate],
+  ];
+
   return `
-    <div class="meta-grid">
-      ${metaItem('TAG', item.tag)}
-      ${metaItem('Nome', item.name)}
-      ${metaItem('Tipo', item.type)}
-      ${metaItem('Setor', item.sector)}
-      ${metaItem('Localização', item.location)}
-      ${metaItem('Fabricante', item.manufacturer)}
-      ${metaItem('Modelo', item.model)}
-      ${metaItem('Nº de Série', item.serial)}
-      ${metaItem('Status', item.status)}
-      ${metaItem('Calibração', item.calibrationDate)}
-      ${metaItem('Validade', item.validityDate)}
+    <div class="code-block">
+      <div style="display:grid; gap:8px;">
+        ${rows.map(([label, value]) => `
+          <div style="display:flex; justify-content:space-between; gap:12px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:6px;">
+            <strong style="color:#93c5fd;">${escapeHtml(label)}</strong>
+            <span style="text-align:right;">${escapeHtml(value || '-')}</span>
+          </div>
+        `).join('')}
+      </div>
     </div>
   `;
 }
