@@ -348,6 +348,24 @@ function metaItem(label, value) {
   `;
 }
 
+function renderDadosTecnicos(item) {
+  return `
+    <div class="meta-grid">
+      ${metaItem('TAG', item.tag)}
+      ${metaItem('Nome', item.name)}
+      ${metaItem('Tipo', item.type)}
+      ${metaItem('Setor', item.sector)}
+      ${metaItem('Localização', item.location)}
+      ${metaItem('Fabricante', item.manufacturer)}
+      ${metaItem('Modelo', item.model)}
+      ${metaItem('Nº de Série', item.serial)}
+      ${metaItem('Status', item.status)}
+      ${metaItem('Calibração', item.calibrationDate)}
+      ${metaItem('Validade', item.validityDate)}
+    </div>
+  `;
+}
+
 function getUrlQuery() {
   const params = new URLSearchParams(window.location.search);
   return {
@@ -687,7 +705,7 @@ function renderDetail(item, noticeText = '') {
 
       <div class="card panel">
         <h3>Dados técnicos</h3>
-        <div class="code-block">${escapeHtml(JSON.stringify(itemSafe.raw, null, 2))}</div>
+        ${renderDadosTecnicos(itemSafe)}
       </div>
 
       ${notesBlock}
