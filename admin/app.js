@@ -508,7 +508,12 @@ function renderEditableRow(item) {
             ${draft.previewUrl
               ? `<img class="thumb thumb-large" src="${escapeHtml(draft.previewUrl)}" alt="${escapeHtml(draft.name)}" />`
               : `<div class="thumb-fallback thumb-large">${t('noImage')}</div>`}
-            <input id="editPhotoInput" class="file-input compact-file" type="file" accept="image/*" capture="environment" />
+            <div class="inline-actions">
+            <button type="button" id="takeEditPhotoButton" class="secondary-button">Tirar foto</button>
+            <button type="button" id="chooseEditPhotoButton" class="outline-button">Escolher arquivo</button>
+          </div>
+          <input id="editPhotoCameraInput" class="file-input compact-file" type="file" accept="image/*" capture="environment" style="display:none" />
+          <input id="editPhotoFileInput" class="file-input compact-file" type="file" accept="image/*" style="display:none" />
           </div>
 
           <div class="inline-actions">
@@ -654,7 +659,12 @@ function renderApp(notice = '') {
 
           ${createAdditionalFields('create', state.createForm)}
 
-          <input id="photoInput" class="file-input" type="file" accept="image/*" capture="environment" />
+          <div class="inline-actions">
+            <button type="button" id="takePhotoButton" class="secondary-button">Tirar foto</button>
+            <button type="button" id="choosePhotoButton" class="outline-button">Escolher arquivo</button>
+          </div>
+          <input id="photoCameraInput" class="file-input" type="file" accept="image/*" capture="environment" style="display:none" />
+          <input id="photoFileInput" class="file-input" type="file" accept="image/*" style="display:none" />
           ${createPreviewBlock()}
           <div class="inline-actions">
             <button id="createButton" class="primary-button">${t('create')}</button>
@@ -777,7 +787,7 @@ function bindLoginEvents() {
 function bindEvents() {
   bindCreateFormLiveState();
 
-  document.getElementById('photoInput')?.addEventListener('change', (event) => {
+  const handleCreatePhotoChange = (event) => {
     updateCreateFormState();
     const file = event.target.files?.[0];
 
@@ -785,13 +795,26 @@ function bindEvents() {
     state.createPreviewUrl = file ? URL.createObjectURL(file) : '';
 
     renderApp();
+  };
+
+  document.getElementById('takePhotoButton')?.addEventListener('click', () => {
+    document.getElementById('photoCameraInput')?.click();
   });
+
+  document.getElementById('choosePhotoButton')?.addEventListener('click', () => {
+    document.getElementById('photoFileInput')?.click();
+  });
+
+  document.getElementById('photoCameraInput')?.addEventListener('change', handleCreatePhotoChange);
+  document.getElementById('photoFileInput')?.addEventListener('change', handleCreatePhotoChange);
 
   document.getElementById('clearCreatePhoto')?.addEventListener('click', () => {
     state.createPreviewUrl = '';
     state.createPhotoFile = null;
-    const input = document.getElementById('photoInput');
-    if (input) input.value = '';
+    const cameraInput = document.getElementById('photoCameraInput');
+    const fileInput = document.getElementById('photoFileInput');
+    if (cameraInput) cameraInput.value = '';
+    if (fileInput) fileInput.value = '';
     renderApp();
   });
 
@@ -1001,7 +1024,7 @@ function bindEvents() {
   });
 
 
-  document.getElementById('editPhotoInput')?.addEventListener('change', (event) => {
+  const handleEditPhotoChange = (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
     state.editDraft = {
@@ -1010,7 +1033,18 @@ function bindEvents() {
       previewUrl: URL.createObjectURL(file)
     };
     renderApp();
+  };
+
+  document.getElementById('takeEditPhotoButton')?.addEventListener('click', () => {
+    document.getElementById('editPhotoCameraInput')?.click();
   });
+
+  document.getElementById('chooseEditPhotoButton')?.addEventListener('click', () => {
+    document.getElementById('editPhotoFileInput')?.click();
+  });
+
+  document.getElementById('editPhotoCameraInput')?.addEventListener('change', handleEditPhotoChange);
+  document.getElementById('editPhotoFileInput')?.addEventListener('change', handleEditPhotoChange);
 
   [
     'editTagInput',
