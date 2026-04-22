@@ -678,7 +678,10 @@ function renderApp(notice = '') {
       <div class="card panel">
         <div class="inline-actions" style="justify-content: space-between; align-items: center;">
   <h3>${t('listTitle')}</h3>
-  <button id="pdfButton" class="primary-button" type="button">Gerar PDF QR</button>
+  <div class="inline-actions">
+    <button id="openAllPopupButton" class="outline-button" type="button">Abrir todos os cadastros</button>
+    <button id="pdfButton" class="primary-button" type="button">Gerar PDF QR</button>
+  </div>
 </div>
         <div class="table-wrap">
           <table>
@@ -879,6 +882,122 @@ function bindEvents() {
 
   document.getElementById('pdfButton')?.addEventListener('click', () => {
     window.open(`${CONFIG.API_BASE_URL}/equipment/pdf`, '_blank', 'noopener,noreferrer');
+  });
+
+  document.getElementById('openAllPopupButton')?.addEventListener('click', async () => {
+    const popup = window.open('', '_blank', 'width=1200,height=800');
+
+    if (!popup) {
+      alert('Não foi possível abrir a janela.');
+      return;
+    }
+
+    popup.document.write(`
+      <!DOCTYPE html>
+      <html lang="pt-BR">
+      <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Todos os cadastros</title>
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            background: #0f172a;
+            color: #e5eefc;
+          }
+          .top {
+            background: linear-gradient(135deg, #1d4ed8, #0f172a);
+            padding: 20px;
+            border-bottom: 1px solid rgba(255,255,255,.12);
+          }
+          h1 {
+            margin: 0;
+            font-size: 24px;
+          }
+          .meta {
+            margin-top: 6px;
+            color: #cbd5e1;
+            font-size: 14px;
+          }
+          .panel {
+            margin: 20px;
+            background: #111827;
+            border: 1px solid rgba(255,255,255,.08);
+            border-radius: 14px;
+            overflow: hidden;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+          }
+          th, td {
+            padding: 10px 12px;
+            text-align: left;
+            border-bottom: 1px solid rgba(255,255,255,.08);
+          }
+          th {
+            background: #1e293b;
+            color: #f8fafc;
+          }
+          tr:nth-child(even) {
+            background: rgba(255,255,255,.02);
+          }
+        </style>
+      </head>
+      <body>
+        <div class="top">
+          <h1>Todos os cadastros</h1>
+          <div class="meta">Carregando...</div>
+        </div>
+        <div class="panel">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>TAG</th>
+                <th>Nome</th>
+                <th>Tipo</th>
+                <th>Nº de série</th>
+                <th>Status</th>
+                <th>Calibração</th>
+                <th>Próxima calibração</th>
+              </tr>
+            </thead>
+            <tbody id="popupTableBody">
+              <tr><td colspan="8">Carregando registros...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </body>
+      </html>
+    `);
+    popup.document.close();
+
+    try {
+      const items = await loadItems();
+      const rows = items.map((item) => `
+        <tr>
+          <td>${escapeHtml(item.id)}</td>
+          <td>${escapeHtml(item.tag)}</td>
+          <td>${escapeHtml(item.name)}</td>
+          <td>${escapeHtml(item.equipment_type || '')}</td>
+          <td>${escapeHtml(item.serial_number || '')}</td>
+          <td>${escapeHtml(item.status || '')}</td>
+          <td>${escapeHtml(item.calibration_date || '')}</td>
+          <td>${escapeHtml(item.next_calibration_date || '')}</td>
+        </tr>
+      `).join('');
+
+      popup.document.querySelector('.meta').textContent = `Total: ${items.length}`;
+      popup.document.getElementById('popupTableBody').innerHTML =
+        rows || '<tr><td colspan="8">Nenhum cadastro encontrado.</td></tr>';
+    } catch (error) {
+      popup.document.querySelector('.meta').textContent = 'Erro ao carregar';
+      popup.document.getElementById('popupTableBody').innerHTML =
+        '<tr><td colspan="8">Falha ao carregar todos os cadastros.</td></tr>';
+    }
   });
 
 
