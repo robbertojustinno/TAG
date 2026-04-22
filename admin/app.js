@@ -678,7 +678,10 @@ function renderApp(notice = '') {
       <div class="card panel">
         <div class="inline-actions" style="justify-content: space-between; align-items: center;">
   <h3>${t('listTitle')}</h3>
-  <button id="pdfButton" class="primary-button" type="button">Gerar PDF QR</button>
+  <div class="inline-actions">
+    <button id="openAllPopupButton" class="outline-button" type="button">Abrir todos os cadastros</button>
+    <button id="pdfButton" class="primary-button" type="button">Gerar PDF QR</button>
+  </div>
 </div>
         <div class="table-wrap">
           <table>
@@ -879,6 +882,100 @@ function bindEvents() {
 
   document.getElementById('pdfButton')?.addEventListener('click', () => {
     window.open(`${CONFIG.API_BASE_URL}/equipment/pdf`, '_blank', 'noopener,noreferrer');
+  });
+
+  document.getElementById('openAllPopupButton')?.addEventListener('click', async () => {
+    try {
+      const items = await loadItems();
+      const popup = window.open('', '_blank', 'width=1200,height=800,noopener,noreferrer');
+
+      if (!popup) {
+        alert('Não foi possível abrir a janela.');
+        return;
+      }
+
+      const rows = items.map((item) => `
+        <tr>
+          <td>${escapeHtml(item.id)}</td>
+          <td>${escapeHtml(item.tag)}</td>
+          <td>${escapeHtml(item.name)}</td>
+          <td>${escapeHtml(item.equipment_type || '')}</td>
+          <td>${escapeHtml(item.serial_number || '')}</td>
+          <td>${escapeHtml(item.status || '')}</td>
+          <td>${escapeHtml(item.calibration_date || '')}</td>
+          <td>${escapeHtml(item.next_calibration_date || '')}</td>
+        </tr>
+      `).join('');
+
+      popup.document.write(`
+        <!DOCTYPE html>
+        <html lang="pt-BR">
+        <head>
+          <meta charset="UTF-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <title>Todos os cadastros</title>
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              margin: 16px;
+              background: #ffffff;
+              color: #111827;
+            }
+            h1 {
+              margin: 0 0 14px;
+              font-size: 22px;
+            }
+            .meta {
+              margin-bottom: 14px;
+              color: #4b5563;
+              font-size: 14px;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              font-size: 14px;
+            }
+            th, td {
+              border: 1px solid #d1d5db;
+              padding: 8px;
+              text-align: left;
+              vertical-align: top;
+            }
+            th {
+              background: #f3f4f6;
+            }
+            tr:nth-child(even) {
+              background: #fafafa;
+            }
+          </style>
+        </head>
+        <body>
+          <h1>Todos os cadastros</h1>
+          <div class="meta">Total: ${items.length}</div>
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>TAG</th>
+                <th>Nome</th>
+                <th>Tipo</th>
+                <th>Nº de série</th>
+                <th>Status</th>
+                <th>Calibração</th>
+                <th>Próxima calibração</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows || '<tr><td colspan="8">Nenhum cadastro encontrado.</td></tr>'}
+            </tbody>
+          </table>
+        </body>
+        </html>
+      `);
+      popup.document.close();
+    } catch (error) {
+      alert('Falha ao abrir todos os cadastros.');
+    }
   });
 
 
