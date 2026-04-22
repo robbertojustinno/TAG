@@ -508,7 +508,7 @@ function renderEditableRow(item) {
             ${draft.previewUrl
               ? `<img class="thumb thumb-large" src="${escapeHtml(draft.previewUrl)}" alt="${escapeHtml(draft.name)}" />`
               : `<div class="thumb-fallback thumb-large">${t('noImage')}</div>`}
-            <input id="editPhotoInput" class="file-input compact-file" type="file" accept="image/*" />
+            <input id="editPhotoInput" class="file-input compact-file" type="file" accept="image/*" capture="environment" />
           </div>
 
           <div class="inline-actions">
@@ -654,7 +654,7 @@ function renderApp(notice = '') {
 
           ${createAdditionalFields('create', state.createForm)}
 
-          <input id="photoInput" class="file-input" type="file" accept="image/*" />
+          <input id="photoInput" class="file-input" type="file" accept="image/*" capture="environment" />
           ${createPreviewBlock()}
           <div class="inline-actions">
             <button id="createButton" class="primary-button">${t('create')}</button>
