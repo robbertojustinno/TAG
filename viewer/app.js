@@ -389,7 +389,7 @@ function renderHome() {
       <div class="card hero">
         <div>
           <h2>Consulta rápida por QR ou TAG</h2>
-          <p class="subtle">Viewer separado, rápido e profissional. Somente leitura. Feito para celular, navegador e abertura direta por link.</p>
+          <p class="subtle">Viewer V3 - rápido e profissional.</p>
         </div>
 
         <div class="badge-row">
@@ -439,7 +439,7 @@ function renderHome() {
         <div class="notice">Se você abrir o Viewer com <strong>?tag=TAG-001</strong> ou <strong>?id=15</strong>, a consulta já pode abrir direta.</div>
       </div>
 
-      <div class="footer-note">Viewer em modo somente leitura • ideal para celular e consulta rápida</div>
+      <div class="footer-note">Viewer V3 • TagCheck • Smart Asset Tracking</div>
     </section>
   `;
 
