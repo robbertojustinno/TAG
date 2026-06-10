@@ -6,8 +6,8 @@ const logoutButton = document.getElementById('logoutButton');
 const I18N = {
   pt: {
     brandTitle: 'TagCheck • Smart Asset Tracking',
-    brandSubtitle: 'Powered by Just Engine™ ⚡',
-    heroTitle: 'Admin V3',
+    brandSubtitle: 'Powered by Rovix Automation™ ⚡',
+    heroTitle: 'Admin V4',
     heroText: 'Cadastro, consulta e gestão completa de equipamentos e instrumentos.',
     apiOk: 'API online',
     apiFail: 'API indisponível',
@@ -80,8 +80,8 @@ const I18N = {
   },
   en: {
     brandTitle: 'TagCheck • Smart Asset Tracking',
-    brandSubtitle: 'Powered by Just Engine™ ⚡',
-    heroTitle: 'Admin V3',
+    brandSubtitle: 'Powered by Rovix Automation™ ⚡',
+    heroTitle: 'Admin V4',
     heroText: 'Complete registration, lookup and management for equipment and instruments.',
     apiOk: 'API online',
     apiFail: 'API unavailable',
