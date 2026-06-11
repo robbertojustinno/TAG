@@ -348,35 +348,6 @@ function metaItem(label, value) {
   `;
 }
 
-function renderDadosTecnicos(item) {
-  const rows = [
-    ['TAG', item.tag],
-    ['Nome', item.name],
-    ['Tipo', item.type],
-    ['Setor', item.sector],
-    ['Localização', item.location],
-    ['Fabricante', item.manufacturer],
-    ['Modelo', item.model],
-    ['Nº de Série', item.serial],
-    ['Status', item.status],
-    ['Calibração', item.calibrationDate],
-    ['Validade', item.validityDate],
-  ];
-
-  return `
-    <div class="code-block">
-      <div style="display:grid; gap:8px;">
-        ${rows.map(([label, value]) => `
-          <div style="display:flex; justify-content:space-between; gap:12px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:6px;">
-            <strong style="color:#93c5fd;">${escapeHtml(label)}</strong>
-            <span style="text-align:right;">${escapeHtml(value || '-')}</span>
-          </div>
-        `).join('')}
-      </div>
-    </div>
-  `;
-}
-
 function getUrlQuery() {
   const params = new URLSearchParams(window.location.search);
   return {
@@ -418,7 +389,7 @@ function renderHome() {
       <div class="card hero">
         <div>
           <h2>Consulta rápida por QR ou TAG</h2>
-          <p class="subtle">Viewer V3 - rápido e profissional.</p>
+          <p class="subtle">Viewer separado, rápido e profissional. Somente leitura. Feito para celular, navegador e abertura direta por link.</p>
         </div>
 
         <div class="badge-row">
@@ -468,7 +439,7 @@ function renderHome() {
         <div class="notice">Se você abrir o Viewer com <strong>?tag=TAG-001</strong> ou <strong>?id=15</strong>, a consulta já pode abrir direta.</div>
       </div>
 
-      <div class="footer-note">Viewer V3 • TagCheck • Smart Asset Tracking</div>
+      <div class="footer-note">Viewer em modo somente leitura • ideal para celular e consulta rápida</div>
     </section>
   `;
 
@@ -716,7 +687,7 @@ function renderDetail(item, noticeText = '') {
 
       <div class="card panel">
         <h3>Dados técnicos</h3>
-        ${renderDadosTecnicos(itemSafe)}
+        <div class="code-block">${escapeHtml(JSON.stringify(itemSafe.raw, null, 2))}</div>
       </div>
 
       ${notesBlock}
