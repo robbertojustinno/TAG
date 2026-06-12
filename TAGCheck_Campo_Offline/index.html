@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f172a" />
+  <title>TAGCheck Campo Offline</title>
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" type="image/png" href="./public/favicon.png" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <img src="./public/logo.png" alt="Rovix Automation" class="brand-logo" />
+        <div>
+          <h1>TAGCheck Campo</h1>
+          <p>Cadastro offline • Rovix Automation</p>
+        </div>
+      </div>
+      <span id="netStatus" class="status-pill">Verificando...</span>
+    </header>
+
+    <main class="container">
+      <section class="card hero">
+        <div>
+          <h2>Cadastro de instrumentos no local</h2>
+          <p>Funciona sem internet. Tire a foto durante o cadastro e sincronize quando voltar o sinal.</p>
+        </div>
+        <div class="hero-actions">
+          <button id="installBtn" class="outline hidden">Instalar app</button>
+          <button id="syncBtn">Sincronizar pendentes</button>
+        </div>
+      </section>
+
+      <section class="grid">
+        <form id="equipmentForm" class="card form-card">
+          <h3>Novo cadastro offline</h3>
+          <label>TAG *</label>
+          <input id="tag" name="tag" required placeholder="Ex.: 6-BB-PI-04" autocomplete="off" />
+
+          <label>Nome / Descrição *</label>
+          <input id="name" name="name" required placeholder="Ex.: Indicador de Pressão" autocomplete="off" />
+
+          <div class="two-cols">
+            <div><label>Tipo</label><input id="equipment_type" name="equipment_type" placeholder="Ex.: Manômetro" /></div>
+            <div><label>Setor</label><input id="sector" name="sector" placeholder="Ex.: Casa de Bombas" /></div>
+          </div>
+
+          <label>Localização</label>
+          <input id="location" name="location" placeholder="Ex.: Entrada da casa de bombas" />
+
+          <div class="two-cols">
+            <div><label>Fabricante</label><input id="manufacturer" name="manufacturer" placeholder="Ex.: DIN" /></div>
+            <div><label>Modelo</label><input id="model" name="model" /></div>
+          </div>
+
+          <div class="two-cols">
+            <div><label>Nº de série</label><input id="serial_number" name="serial_number" /></div>
+            <div><label>Status</label><select id="status" name="status"><option>Ativo</option><option>Sem serviço</option><option>Manutenção</option><option>Inativo</option></select></div>
+          </div>
+
+          <div class="two-cols">
+            <div><label>Data calibração</label><input id="calibration_date" name="calibration_date" type="date" /></div>
+            <div><label>Próx. calibração</label><input id="next_calibration_date" name="next_calibration_date" type="date" /></div>
+          </div>
+
+          <label>Observações</label>
+          <textarea id="notes" name="notes" rows="3" placeholder="Anote posição, acesso, condição do instrumento..."></textarea>
+
+          <label>Foto do instrumento *</label>
+          <input id="photo" name="photo" type="file" accept="image/*" capture="environment" required />
+          <img id="preview" class="preview hidden" alt="Prévia da foto" />
+
+          <div class="actions">
+            <button type="submit">Salvar offline</button>
+            <button type="button" id="clearBtn" class="outline">Limpar</button>
+          </div>
+        </form>
+
+        <aside class="card side-card">
+          <h3>Configuração</h3>
+          <label>API TAGCheck</label>
+          <input id="apiBase" placeholder="https://tag-1-xfzk.onrender.com" />
+          <div class="two-cols">
+            <div><label>Usuário admin</label><input id="loginUser" placeholder="admin" /></div>
+            <div><label>Senha</label><input id="loginPass" type="password" /></div>
+          </div>
+          <button id="loginBtn" type="button" class="secondary">Entrar e salvar token</button>
+          <label>Token salvo</label>
+          <input id="token" placeholder="Bearer token" />
+          <button id="saveConfigBtn" type="button" class="outline">Salvar configuração</button>
+          <p class="small">Faça login uma vez com internet. Depois pode cadastrar offline e sincronizar mais tarde.</p>
+
+          <h3>Backup local</h3>
+          <div class="actions stacked">
+            <button id="exportBtn" type="button" class="outline">Exportar pendentes JSON</button>
+            <label class="file-button">Importar JSON<input id="importFile" type="file" accept="application/json" /></label>
+          </div>
+        </aside>
+      </section>
+
+      <section class="card">
+        <div class="section-head">
+          <h3>Cadastros pendentes</h3>
+          <span id="countBadge" class="status-pill neutral">0 pendentes</span>
+        </div>
+        <div id="pendingList" class="pending-list"></div>
+      </section>
+    </main>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="./app.js"></script>
+</body>
+</html>
