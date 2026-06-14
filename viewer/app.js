@@ -222,6 +222,29 @@ function parseHybridText(text) {
   const raw = normalizeText(text);
   if (!raw) return null;
 
+  // Correção QR híbrido TAGCheck:
+  // Reconhece textos como:
+  // TAGCHECK | MODO HIBRIDO
+  // TAG: 6 BOM RDX
+  // NOME: Manom
+  const cleanedRaw = raw
+    .replace(/\r/g, '\n')
+    .replace(/[“”]/g, '"')
+    .replace(/[’]/g, "'")
+    .replace(/\u00A0/g, ' ')
+    .trim();
+
+  const directTagMatch = cleanedRaw.match(/(?:^|\n|\|)\s*TAG\s*[:=]\s*([^\n|;]+)/i);
+  if (directTagMatch) {
+    const directTag = directTagMatch[1].trim();
+    return {
+      kind: 'pairs',
+      data: { tag: directTag },
+      tag: directTag,
+      id: null,
+    };
+  }
+
   if (/^https?:\/\//i.test(raw)) {
     const url = new URL(raw);
     const params = url.searchParams;
@@ -245,7 +268,7 @@ function parseHybridText(text) {
     };
   }
 
-  const pairPattern = /([a-zA-Z_]+)\s*[:=]\s*([^|;,\n]+)/g;
+  const pairPattern = /([a-zA-Z_]+)\s*[:=]\s*([^\n]+)/g;
   const pairs = {};
   let match = null;
   while ((match = pairPattern.exec(raw)) !== null) {
