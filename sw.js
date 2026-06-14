@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tagcheck-viewer-v2';
+const CACHE_NAME = 'tagcheck-viewer-v7';
 const APP_SHELL = [
   './',
   './index.html',
