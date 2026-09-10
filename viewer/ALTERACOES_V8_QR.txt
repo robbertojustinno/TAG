@@ -1,0 +1,9 @@
+Alterações seguras realizadas:
+- app.js.bak incluído como backup do app.js original.
+- Parser de QR híbrido ficou mais tolerante para reconhecer TAG: mesmo com cabeçalho TAGCHECK.
+- Regex de pares TAG/NOME/TIPO ajustada sem remover funcionalidades existentes.
+- Botão voltar ajustado para retornar à Home quando estiver em tela interna.
+- Cache do service worker atualizado para tagcheck-viewer-v8-qrfix.
+- Versão no config.js ajustada para 7.1.0 quando o arquivo existe.
+
+Não foram alterados endpoints, layout principal ou funções de consulta.
