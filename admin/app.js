@@ -314,12 +314,16 @@ async function loginAdmin(username, password) {
     throw new Error(t('loginError'));
   }
 
-  return await response.json();
+  const result = await response.json();
+  if (result.requires_company_selection) {
+    throw new Error('Este usuário precisa selecionar uma empresa pela API. A interface será disponibilizada em etapa posterior.');
+  }
+  return result;
 }
 
 async function loadItems() {
   const response = await fetchWithTimeout(buildUrl(CONFIG.API_BASE_URL, CONFIG.ENDPOINTS.list), {
-    headers: { Accept: 'application/json' }
+    headers: getAuthHeaders({ Accept: 'application/json' })
   });
 
   if (!response.ok) throw new Error(t('listError'));
@@ -341,7 +345,7 @@ async function searchByTag(tag) {
   );
 
   const response = await fetchWithTimeout(url, {
-    headers: { Accept: 'application/json' }
+    headers: getAuthHeaders({ Accept: 'application/json' })
   });
 
   if (!response.ok) throw new Error(t('searchError'));
@@ -885,9 +889,7 @@ function bindEvents() {
     }
   });
 
-  document.getElementById('pdfButton')?.addEventListener('click', () => {
-    window.open(`${CONFIG.API_BASE_URL}/equipment/pdf`, '_blank', 'noopener,noreferrer');
-  });
+  document.getElementById('pdfButton')?.addEventListener('click', openEquipmentPdf);
 
 
   document.getElementById('editPhotoInput')?.addEventListener('change', (event) => {
@@ -1109,3 +1111,35 @@ document.getElementById('langEn').addEventListener('click', () => setLanguage('e
 logoutButton.addEventListener('click', logoutAdmin);
 
 boot();
+
+
+async function openEquipmentPdf() {
+  // Open synchronously to preserve the existing new-tab behavior under popup blockers.
+  const target = `tagcheck_pdf_${crypto.randomUUID()}`;
+  const tab = window.open('about:blank', target);
+  if (!tab) return;
+  tab.opener = null;
+  try {
+    const response = await fetchWithTimeout(`${CONFIG.API_BASE_URL}/equipment/pdf-access`, {
+      method: 'POST', headers: getAuthHeaders({ Accept: 'application/json' })
+    });
+    if (!response.ok) throw new Error('Não foi possível gerar o PDF. Entre novamente e tente outra vez.');
+    const result = await response.json();
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = `${CONFIG.API_BASE_URL}/equipment/pdf`;
+    form.target = target;
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'pdf_token';
+    input.value = result.token;
+    form.appendChild(input);
+    document.body.appendChild(form);
+    form.submit();
+    form.remove();
+  } catch (error) {
+    tab.close();
+    const feedback = document.getElementById('searchFeedback');
+    if (feedback) feedback.textContent = error.message;
+  }
+}

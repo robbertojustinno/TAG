@@ -1,7 +1,9 @@
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Depends, Response
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Depends, Response, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from sqlalchemy.exc import IntegrityError
 import cloudinary
 import cloudinary.uploader
 import os
@@ -11,8 +13,7 @@ import hmac
 import time
 from io import BytesIO
 
-from sqlalchemy import create_engine, Column, Integer, String, Text, inspect, text
-from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.orm import sessionmaker
 
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
@@ -41,62 +42,47 @@ CLOUDINARY_API_KEY = required_env("CLOUDINARY_API_KEY")
 CLOUDINARY_API_SECRET = required_env("CLOUDINARY_API_SECRET")
 SESSION_TTL_SECONDS = 8 * 60 * 60
 
-engine = create_engine(DATABASE_URL, pool_pre_ping=True, future=True)
+if __package__:
+    from .models import Base, Company, User, UserCompany, Equipment, DEFAULT_COMPANY_SLUG
+    from .migrate_multiempresa import make_engine, migrate
+    from .tenancy import Tenancy, CompanyContext, equipment_query
+    from .admin_api import build_router
+else:
+    from models import Base, Company, User, UserCompany, Equipment, DEFAULT_COMPANY_SLUG
+    from migrate_multiempresa import make_engine, migrate
+    from tenancy import Tenancy, CompanyContext, equipment_query
+    from admin_api import build_router
+
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "legacy-admin@tagcheck.invalid").strip().lower()
+engine = make_engine(DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
-Base = declarative_base()
+try:
+    MIGRATION = migrate(engine, ADMIN_USERNAME, ADMIN_PASSWORD, ADMIN_EMAIL)
+except Exception:
+    engine.dispose()
+    raise RuntimeError("Database migration failed; no automatic destructive repair was attempted") from None
+DEFAULT_COMPANY_ID = MIGRATION["default_company_id"]
+LEGACY_USER_ID = MIGRATION["legacy_user_id"]
 
-
-class Equipment(Base):
-    __tablename__ = "tagcheck_equipment"
-
-    id = Column(Integer, primary_key=True, index=True)
-    tag = Column(String, unique=True, index=True, nullable=False)
-    name = Column(String, nullable=False)
-    photo = Column(String, nullable=False)
-
-    equipment_type = Column(String, nullable=True)
-    sector = Column(String, nullable=True)
-    location = Column(String, nullable=True)
-    manufacturer = Column(String, nullable=True)
-    model = Column(String, nullable=True)
-    serial_number = Column(String, nullable=True)
-    calibration_date = Column(String, nullable=True)
-    next_calibration_date = Column(String, nullable=True)
-    status = Column(String, nullable=True)
-    notes = Column(Text, nullable=True)
-
-
-Base.metadata.create_all(bind=engine)
-
-
-def ensure_extra_columns() -> None:
-    inspector = inspect(engine)
-    existing_columns = {col["name"] for col in inspector.get_columns("tagcheck_equipment")}
-
-    wanted_columns = {
-        "equipment_type": "VARCHAR",
-        "sector": "VARCHAR",
-        "location": "VARCHAR",
-        "manufacturer": "VARCHAR",
-        "model": "VARCHAR",
-        "serial_number": "VARCHAR",
-        "calibration_date": "VARCHAR",
-        "next_calibration_date": "VARCHAR",
-        "status": "VARCHAR",
-        "notes": "TEXT",
-    }
-
-    with engine.begin() as connection:
-        for column_name, column_type in wanted_columns.items():
-            if column_name not in existing_columns:
-                connection.execute(
-                    text(f'ALTER TABLE tagcheck_equipment ADD COLUMN "{column_name}" {column_type}')
-                )
-
-
-ensure_extra_columns()
-
+auth = Tenancy(SessionLocal, ADMIN_TOKEN, DEFAULT_COMPANY_ID, LEGACY_USER_ID, ADMIN_USERNAME, ADMIN_PASSWORD)
 app = FastAPI()
+app.include_router(build_router(auth))
+
+@app.exception_handler(RequestValidationError)
+async def safe_validation_error(request: Request, exc: RequestValidationError):
+    # FastAPI's default validation output can echo submitted passwords/tokens.
+    return JSONResponse(status_code=422, content={"detail": [
+        {"loc": list(e["loc"]), "msg": e["msg"], "type": e["type"]} for e in exc.errors()
+    ]})
+
+@app.middleware("http")
+async def prevent_private_caching(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -111,11 +97,6 @@ cloudinary.config(
     api_key=CLOUDINARY_API_KEY,
     api_secret=CLOUDINARY_API_SECRET,
 )
-
-
-class LoginPayload(BaseModel):
-    username: str
-    password: str
 
 
 def build_qr_payload(item: Equipment) -> str:
@@ -158,35 +139,6 @@ def serialize_equipment(item: Equipment) -> dict:
     
 
 
-def session_signature(payload: str) -> str:
-    # Password/username changes invalidate sessions, as does signing-key rotation.
-    identity = ADMIN_USERNAME + "\0" + ADMIN_PASSWORD + "\0" + payload
-    return hmac.new(ADMIN_TOKEN.encode(), identity.encode(), hashlib.sha256).hexdigest()
-
-
-def issue_session() -> str:
-    payload = f"{int(time.time()) + SESSION_TTL_SECONDS}.{secrets.token_hex(32)}"
-    return f"{payload}.{session_signature(payload)}"
-
-
-def require_admin(authorization: str = Header(default=None)) -> str:
-    try:
-        if not authorization or not authorization.startswith("Bearer "):
-            raise ValueError()
-        token = authorization[7:]
-        if len(token) > 200:
-            raise ValueError()
-        expires, nonce, signature = token.split(".")
-        payload = f"{expires}.{nonce}"
-        if len(nonce) != 64 or not hmac.compare_digest(signature, session_signature(payload)):
-            raise ValueError()
-        if int(expires) <= int(time.time()):
-            raise ValueError()
-    except (ValueError, TypeError):
-        raise HTTPException(status_code=401, detail="Invalid or expired session") from None
-    return ADMIN_USERNAME
-
-
 @app.get("/")
 def root():
     return {"ok": True, "message": "TagCheck backend online"}
@@ -195,25 +147,6 @@ def root():
 @app.get("/health")
 def health():
     return {"ok": True}
-
-
-@app.post("/auth/login")
-def login(payload: LoginPayload, response: Response):
-    response.headers["Cache-Control"] = "no-store"
-    response.headers["Pragma"] = "no-cache"
-    username = (payload.username or "").strip()
-    password = payload.password or ""
-
-    if not (secrets.compare_digest(username.encode(), ADMIN_USERNAME.encode()) &
-            secrets.compare_digest(password.encode(), ADMIN_PASSWORD.encode())):
-        raise HTTPException(status_code=401, detail="UsuÃ¡rio ou senha invÃ¡lidos.")
-
-    return {
-        "ok": True,
-        "token": issue_session(),
-        "expires_in": SESSION_TTL_SECONDS,
-        "username": ADMIN_USERNAME,
-    }
 
 
 @app.post("/equipment")
@@ -231,7 +164,7 @@ async def create_equipment(
     next_calibration_date: str = Form(""),
     status: str = Form("Ativo"),
     notes: str = Form(""),
-    _auth: str = Depends(require_admin),
+    _auth: CompanyContext = Depends(auth.writer),
 ):
     if not tag.strip():
         raise HTTPException(status_code=400, detail="TAG Ã© obrigatÃ³ria.")
@@ -242,13 +175,13 @@ async def create_equipment(
 
     db = SessionLocal()
     try:
-        existing = db.query(Equipment).filter(Equipment.tag == tag.strip()).first()
+        existing = equipment_query(db, _auth).filter(Equipment.tag == tag.strip()).first()
         if existing:
             raise HTTPException(status_code=400, detail="TAG jÃ¡ cadastrada.")
 
         result = cloudinary.uploader.upload(
             photo.file,
-            folder="tagcheck/equipments",
+            folder="tagcheck/equipments" if _auth.company_id == DEFAULT_COMPANY_ID else f"tagcheck/companies/{_auth.company_id}/equipments",
             resource_type="image",
         )
         image_url = result.get("secure_url")
@@ -256,6 +189,7 @@ async def create_equipment(
             raise HTTPException(status_code=500, detail="Falha ao obter URL da imagem.")
 
         item = Equipment(
+            company_id=_auth.company_id,
             tag=tag.strip(),
             name=name.strip(),
             photo=image_url,
@@ -278,45 +212,48 @@ async def create_equipment(
     except HTTPException:
         db.rollback()
         raise
-    except Exception as e:
+    except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Erro ao salvar equipamento: {str(e)}")
+        raise HTTPException(status_code=409, detail="Equipment conflicts with an existing record") from None
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Equipment operation failed") from None
     finally:
         db.close()
 
 
 @app.get("/equipment")
-def list_equipment():
+def list_equipment(_auth: CompanyContext = Depends(auth.read_context)):
     db = SessionLocal()
     try:
-        items = db.query(Equipment).order_by(Equipment.id.desc()).all()
+        items = equipment_query(db, _auth).order_by(Equipment.id.desc()).all()
         return [serialize_equipment(i) for i in items]
     finally:
         db.close()
 
 
 @app.get("/equipment/tag/{tag}")
-def get_by_tag(tag: str):
+def get_by_tag(tag: str, _auth: CompanyContext = Depends(auth.read_context)):
     db = SessionLocal()
     try:
         clean_tag = tag.strip()
-        item = db.query(Equipment).filter(Equipment.tag == clean_tag).first()
+        item = equipment_query(db, _auth).filter(Equipment.tag == clean_tag).first()
         if not item:
             raise HTTPException(status_code=404, detail="Equipamento nÃ£o encontrado.")
         return serialize_equipment(item)
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro ao buscar TAG: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=500, detail="Equipment lookup failed") from None
     finally:
         db.close()
 
 
 @app.get("/equipment/{id}/qr-payload")
-def get_qr_payload(id: int):
+def get_qr_payload(id: int, _auth: CompanyContext = Depends(auth.read_context)):
     db = SessionLocal()
     try:
-        item = db.query(Equipment).filter(Equipment.id == id).first()
+        item = equipment_query(db, _auth).filter(Equipment.id == id).first()
         if not item:
             raise HTTPException(status_code=404, detail="Equipamento nÃ£o encontrado.")
 
@@ -345,15 +282,15 @@ async def update_equipment(
     next_calibration_date: str = Form(""),
     status: str = Form("Ativo"),
     notes: str = Form(""),
-    _auth: str = Depends(require_admin),
+    _auth: CompanyContext = Depends(auth.writer),
 ):
     db = SessionLocal()
     try:
-        item = db.query(Equipment).filter(Equipment.id == id).first()
+        item = equipment_query(db, _auth).filter(Equipment.id == id).first()
         if not item:
             raise HTTPException(status_code=404, detail="Equipamento nÃ£o encontrado.")
 
-        duplicated = db.query(Equipment).filter(
+        duplicated = equipment_query(db, _auth).filter(
             Equipment.tag == tag.strip(),
             Equipment.id != id
         ).first()
@@ -376,7 +313,7 @@ async def update_equipment(
         if photo and photo.filename:
             result = cloudinary.uploader.upload(
                 photo.file,
-                folder="tagcheck/equipments",
+                folder="tagcheck/equipments" if _auth.company_id == DEFAULT_COMPANY_ID else f"tagcheck/companies/{_auth.company_id}/equipments",
                 resource_type="image",
             )
             image_url = result.get("secure_url")
@@ -389,9 +326,12 @@ async def update_equipment(
     except HTTPException:
         db.rollback()
         raise
-    except Exception as e:
+    except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Erro ao atualizar equipamento: {str(e)}")
+        raise HTTPException(status_code=409, detail="Equipment conflicts with an existing record") from None
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Equipment operation failed") from None
     finally:
         db.close()
 
@@ -399,11 +339,11 @@ async def update_equipment(
 @app.delete("/equipment/{id}")
 def delete_equipment(
     id: int,
-    _auth: str = Depends(require_admin),
+    _auth: CompanyContext = Depends(auth.deleter),
 ):
     db = SessionLocal()
     try:
-        item = db.query(Equipment).filter(Equipment.id == id).first()
+        item = equipment_query(db, _auth).filter(Equipment.id == id).first()
         if not item:
             raise HTTPException(status_code=404, detail="Equipamento nÃ£o encontrado.")
 
@@ -413,19 +353,21 @@ def delete_equipment(
     except HTTPException:
         db.rollback()
         raise
-    except Exception as e:
+    except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Erro ao excluir equipamento: {str(e)}")
+        raise HTTPException(status_code=409, detail="Equipment conflicts with an existing record") from None
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Equipment operation failed") from None
     finally:
         db.close()
 
 from fastapi.responses import StreamingResponse
 
-@app.get("/equipment/pdf", response_class=StreamingResponse)
-def equipment_pdf_labels():
+def equipment_pdf_labels(_auth: CompanyContext):
     db = SessionLocal()
     try:
-        items = db.query(Equipment).order_by(Equipment.id.asc()).all()
+        items = equipment_query(db, _auth).order_by(Equipment.id.asc()).all()
 
         if not items:
             raise HTTPException(status_code=404, detail="Nenhum equipamento cadastrado.")
@@ -497,3 +439,23 @@ def equipment_pdf_labels():
          
     finally:
         db.close()
+
+
+@app.post("/equipment/pdf-access")
+def create_pdf_access(_auth: CompanyContext = Depends(auth.current)):
+    with SessionLocal() as db:
+        user = db.get(User, _auth.user_id)
+        link = auth.membership(db, user.id, _auth.company_id)
+        return {"token": auth.issue(user, link, purpose="pdf", ttl=120, legacy=_auth.legacy), "expires_in": 120}
+
+
+@app.get("/equipment/pdf", response_class=StreamingResponse)
+def public_or_session_pdf(_auth: CompanyContext = Depends(auth.read_context)):
+    return equipment_pdf_labels(_auth)
+
+
+@app.post("/equipment/pdf", response_class=StreamingResponse)
+def temporary_pdf(request: Request, pdf_token: str = Form(..., max_length=8192)):
+    context = auth.from_token(pdf_token, purpose="pdf")
+    auth.check_company_hint(request, context)
+    return equipment_pdf_labels(context)

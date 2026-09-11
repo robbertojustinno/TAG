@@ -1,9 +1,11 @@
-import ast, os, subprocess, importlib.util, tempfile, secrets, unittest, re
+import ast, os, subprocess, importlib.util, tempfile, secrets, unittest, re, atexit
 from pathlib import Path
 from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 ROOT=Path(__file__).resolve().parents[1]
+import sys
+sys.path.insert(0, str(ROOT / "backend"))
 TMP=tempfile.TemporaryDirectory(prefix='tagcheck-test-')
 # Only generated test credentials; never load local .env or id.txt.
 ENV={'DATABASE_URL':'sqlite:///'+str(Path(TMP.name)/'test.sqlite').replace('\\','/'),
@@ -17,6 +19,14 @@ ast.parse(source)
 spec=importlib.util.spec_from_file_location('tagcheck_test_backend',ROOT/'backend/main.py')
 backend=importlib.util.module_from_spec(spec)
 spec.loader.exec_module(backend)
+
+def cleanup_fixture():
+    # Other suites reuse this engine after StabilizationTests. Release pooled
+    # SQLite handles before TemporaryDirectory's exit cleanup on Windows.
+    backend.engine.dispose()
+    TMP.cleanup()
+
+atexit.register(cleanup_fixture)
 
 class StabilizationTests(unittest.TestCase):
     @classmethod

@@ -6,3 +6,5 @@ sqlalchemy
 psycopg2-binary
 reportlab==4.2.0
 qrcode[pil]
+argon2-cffi==25.1.0
+PyJWT==2.13.0

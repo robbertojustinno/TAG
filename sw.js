@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tagcheck-viewer-v7';
+const CACHE_NAME = 'tagcheck-viewer-v7-tenant-safe';
 const APP_SHELL = [
   './',
   './index.html',
@@ -26,6 +26,11 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
+  // A shared URL cache must never supply another session's company response.
+  if (event.request.headers.has('Authorization')) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
   const isSameOrigin = url.origin === self.location.origin;
   const isAppShell = isSameOrigin && (url.pathname.endsWith('/') || url.pathname.endsWith('/index.html') || /\.(css|js|webmanifest|png|svg)$/.test(url.pathname));
   const isApiRequest = isSameOrigin && /\/api\//.test(url.pathname);
