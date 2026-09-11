@@ -130,7 +130,10 @@ def build_router(auth):
 
     @router.get('/auth/me')
     def me(context=Depends(auth.current)):
+        with auth.sessions() as db:
+            company_name = db.get(Company, context.company_id).name
         return {'user_id': context.user_id, 'email': context.email, 'company_id': context.company_id,
+                'company_name': company_name,
                 'role': context.role, 'is_superadmin': context.is_superadmin}
 
     @router.get('/companies')

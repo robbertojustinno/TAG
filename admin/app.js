@@ -46,7 +46,12 @@ const I18N = {
     logout: 'Sair',
     loginTitle: 'Login do Admin',
     loginSubtitle: 'Acesso protegido ao painel de gestão.',
-    username: 'Usuário',
+    username: 'E-mail ou usuário legado',
+    company: 'Empresa',
+    selectCompany: 'Selecionar empresa',
+    companySubtitle: 'Escolha a empresa para acessar o painel.',
+    companyDenied: 'Acesso à empresa não autorizado.',
+    backToLogin: 'Voltar ao login',
     password: 'Senha',
     loginButton: 'Entrar',
     loginLoading: 'Entrando...',
@@ -120,7 +125,12 @@ const I18N = {
     logout: 'Logout',
     loginTitle: 'Admin Login',
     loginSubtitle: 'Protected access to the management panel.',
-    username: 'Username',
+    username: 'Email or legacy username',
+    company: 'Company',
+    selectCompany: 'Select company',
+    companySubtitle: 'Choose a company to access the panel.',
+    companyDenied: 'Company access is not authorized.',
+    backToLogin: 'Back to login',
     password: 'Password',
     loginButton: 'Sign in',
     loginLoading: 'Signing in...',
@@ -162,6 +172,8 @@ const state = {
   language: localStorage.getItem(CONFIG.STORAGE_KEYS.language) || 'pt',
   authToken: sessionStorage.getItem(CONFIG.STORAGE_KEYS.authToken) || '',
   authUser: sessionStorage.getItem(CONFIG.STORAGE_KEYS.authUser) || '',
+  companyName: '',
+  pendingSelection: null,
   items: [],
   apiReachable: null,
   createPreviewUrl: '',
@@ -208,6 +220,9 @@ function syncHeaderLanguage() {
   openViewerButton.textContent = t('viewer');
   logoutButton.textContent = t('logout');
   logoutButton.classList.toggle('hidden', !state.authToken);
+  const company = document.getElementById('activeCompany');
+  company.textContent = state.companyName ? `${t('company')}: ${state.companyName}` : '';
+  company.classList.toggle('hidden', !state.authToken || !state.companyName);
 }
 
 function escapeHtml(value) {
@@ -306,7 +321,7 @@ async function loginAdmin(username, password) {
       'Content-Type': 'application/json',
       Accept: 'application/json'
     },
-    body: JSON.stringify({ username, password })
+    body: JSON.stringify(username.includes('@') ? { email: username, password } : { username, password })
   });
 
   if (!response.ok) {
@@ -314,11 +329,70 @@ async function loginAdmin(username, password) {
     throw new Error(t('loginError'));
   }
 
-  const result = await response.json();
-  if (result.requires_company_selection) {
-    throw new Error('Este usuário precisa selecionar uma empresa pela API. A interface será disponibilizada em etapa posterior.');
+  return await response.json();
+}
+
+async function readIdentity(token = state.authToken) {
+  const response = await fetchWithTimeout(buildUrl(CONFIG.API_BASE_URL, '/auth/me'), {
+    headers: { Accept: 'application/json', Authorization: `Bearer ${token}` }
+  });
+  if (!response.ok) {
+    logoutAdmin();
+    throw new Error(t('loginError'));
   }
-  return result;
+  return response.json();
+}
+
+async function finishLogin(result) {
+  if (!result.token) throw new Error(t('loginError'));
+  const identity = await readIdentity(result.token);
+  state.authToken = result.token;
+  state.authUser = result.username || identity.email;
+  state.companyName = identity.company_name;
+  state.pendingSelection = null;
+  sessionStorage.setItem(CONFIG.STORAGE_KEYS.authToken, state.authToken);
+  sessionStorage.setItem(CONFIG.STORAGE_KEYS.authUser, state.authUser);
+  syncHeaderLanguage();
+  await loadItems();
+  if (state.authToken) renderApp();
+}
+
+function renderCompanySelection(notice = '') {
+  app.innerHTML = `
+    <section class="login-shell">
+      <form id="companyForm" class="card login-card">
+        <div><h2 class="login-title">${t('selectCompany')}</h2>
+          <p class="login-subtitle">${t('companySubtitle')}</p></div>
+        <label for="companySelect">${t('company')}</label>
+        <select id="companySelect" class="input" required>
+          ${state.pendingSelection.companies.map(company =>
+            `<option value="${escapeHtml(company.id)}">${escapeHtml(company.name)}</option>`).join('')}
+        </select>
+        <div class="inline-actions">
+          <button id="selectCompanyButton" class="primary-button" type="submit">${t('loginButton')}</button>
+          <button id="cancelCompanyButton" class="outline-button" type="button">${t('backToLogin')}</button>
+        </div>
+        <div role="alert">${notice}</div>
+      </form>
+    </section>`;
+  document.getElementById('cancelCompanyButton').addEventListener('click', logoutAdmin);
+  document.getElementById('companyForm').addEventListener('submit', async event => {
+    event.preventDefault();
+    const button = document.getElementById('selectCompanyButton');
+    const cancel = document.getElementById('cancelCompanyButton');
+    button.disabled = cancel.disabled = true;
+    try {
+      const response = await fetchWithTimeout(buildUrl(CONFIG.API_BASE_URL, '/auth/select-company'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${state.pendingSelection.selection_token}` },
+        body: JSON.stringify({ company_id: Number(document.getElementById('companySelect').value) })
+      });
+      if (!response.ok) throw new Error(t(response.status === 403 ? 'companyDenied' : 'loginError'));
+      await finishLogin(await response.json());
+    } catch (error) {
+      renderCurrentView(`<div class="notice error">${escapeHtml(error.message)}</div>`);
+    }
+  });
 }
 
 async function loadItems() {
@@ -597,23 +671,23 @@ function renderDeleteConfirm() {
 function renderLogin(notice = '') {
   app.innerHTML = `
     <section class="login-shell">
-      <div class="card login-card">
+      <form id="loginForm" class="card login-card">
         <div>
           <h2 class="login-title">${t('loginTitle')}</h2>
           <p class="login-subtitle">${t('loginSubtitle')}</p>
         </div>
 
         <div class="login-stack">
-          <input id="loginUserInput" class="input" placeholder="${t('username')}" autocomplete="username" />
-          <input id="loginPassInput" class="input" placeholder="${t('password')}" type="password" autocomplete="current-password" />
+          <input id="loginUserInput" class="input" aria-label="${t('username')}" placeholder="${t('username')}" autocomplete="username" autocapitalize="none" required />
+          <input id="loginPassInput" class="input" aria-label="${t('password')}" placeholder="${t('password')}" type="password" autocomplete="current-password" required />
         </div>
 
         <div class="inline-actions">
           <button id="loginButton" class="primary-button">${t('loginButton')}</button>
         </div>
 
-        <div id="loginFeedback">${notice}</div>
-      </div>
+        <div id="loginFeedback" role="alert">${notice}</div>
+      </form>
     </section>
   `;
 
@@ -756,7 +830,8 @@ function bindCreateFormLiveState() {
 }
 
 function bindLoginEvents() {
-  document.getElementById('loginButton')?.addEventListener('click', async () => {
+  document.getElementById('loginForm')?.addEventListener('submit', async event => {
+    event.preventDefault();
     const username = normalizeText(document.getElementById('loginUserInput')?.value);
     const password = document.getElementById('loginPassInput')?.value || '';
     const feedback = document.getElementById('loginFeedback');
@@ -767,18 +842,18 @@ function bindLoginEvents() {
     }
 
     feedback.innerHTML = `<div class="notice">${t('loginLoading')}</div>`;
+    document.getElementById('loginButton').disabled = true;
 
     try {
       const result = await loginAdmin(username, password);
-      state.authToken = result.token;
-      state.authUser = result.username || username;
-      sessionStorage.setItem(CONFIG.STORAGE_KEYS.authToken, state.authToken);
-      sessionStorage.setItem(CONFIG.STORAGE_KEYS.authUser, state.authUser);
-      syncHeaderLanguage();
-      await loadItems();
-      renderApp(`<div class="notice success">${t('loginSuccess')}</div>`);
+      if (result.requires_company_selection) {
+        state.pendingSelection = result;
+        renderCompanySelection();
+      } else {
+        await finishLogin(result);
+      }
     } catch (error) {
-      feedback.innerHTML = `<div class="notice error">${escapeHtml(error.message || t('loginError'))}</div>`;
+      renderCurrentView(`<div class="notice error">${escapeHtml(error.message || t('loginError'))}</div>`);
     }
   });
 }
@@ -1064,6 +1139,8 @@ window.askDeleteItem = function(id) {
 function logoutAdmin() {
   state.authToken = '';
   state.authUser = '';
+  state.companyName = '';
+  state.pendingSelection = null;
   state.items = [];
   state.editingId = null;
   state.editDraft = null;
@@ -1078,7 +1155,8 @@ function renderCurrentView(notice = '') {
   syncHeaderLanguage();
 
   if (!state.authToken) {
-    renderLogin(notice);
+    if (state.pendingSelection) renderCompanySelection(notice);
+    else renderLogin(notice);
     return;
   }
 
@@ -1092,6 +1170,9 @@ async function boot() {
   try {
     await pingApi();
     if (state.authToken) {
+      const identity = await readIdentity();
+      state.companyName = identity.company_name;
+      syncHeaderLanguage();
       await loadItems();
       renderApp();
     } else {
