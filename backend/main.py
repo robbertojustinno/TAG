@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Depends, Response, Request
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Depends, Response, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.exceptions import RequestValidationError
@@ -233,10 +233,19 @@ async def create_equipment(
 
 
 @app.get("/equipment")
-def list_equipment(_auth: CompanyContext = Depends(auth.read_context)):
+def list_equipment(unit_id: int | None = Query(None, gt=0), _auth: CompanyContext = Depends(auth.read_context)):
     db = SessionLocal()
     try:
-        items = equipment_query(db, _auth).order_by(Equipment.id.desc()).all()
+        if unit_id is not None:
+            if _auth.user_id is None:
+                raise HTTPException(status_code=401, detail="Authentication required for unit filters")
+            unit = db.query(Unit).filter(Unit.id == unit_id, Unit.company_id == _auth.company_id).first()
+            if not unit:
+                raise HTTPException(status_code=404, detail="Unit not found in the active company")
+        query = equipment_query(db, _auth)
+        if unit_id is not None:
+            query = query.filter(Equipment.unit_id == unit_id)
+        items = query.order_by(Equipment.id.desc()).all()
         return [serialize_equipment(i) for i in items]
     finally:
         db.close()

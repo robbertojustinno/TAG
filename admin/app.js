@@ -177,6 +177,8 @@ const state = {
   showSuperadmin: false,
   pendingSelection: null,
   items: [],
+  units: [],
+  selectedUnitId: '',
   apiReachable: null,
   createPreviewUrl: '',
   createPhotoFile: null,
@@ -357,6 +359,7 @@ async function finishLogin(result) {
   sessionStorage.setItem(CONFIG.STORAGE_KEYS.authToken, state.authToken);
   sessionStorage.setItem(CONFIG.STORAGE_KEYS.authUser, state.authUser);
   syncHeaderLanguage();
+  await loadUnits();
   await loadItems();
   if (state.authToken) renderApp();
 }
@@ -400,7 +403,10 @@ function renderCompanySelection(notice = '') {
 }
 
 async function loadItems() {
-  const response = await fetchWithTimeout(buildUrl(CONFIG.API_BASE_URL, CONFIG.ENDPOINTS.list), {
+  const path = state.selectedUnitId
+    ? `${CONFIG.ENDPOINTS.list}?unit_id=${encodeURIComponent(state.selectedUnitId)}`
+    : CONFIG.ENDPOINTS.list;
+  const response = await fetchWithTimeout(buildUrl(CONFIG.API_BASE_URL, path), {
     headers: getAuthHeaders({ Accept: 'application/json' })
   });
 
@@ -409,6 +415,17 @@ async function loadItems() {
   const data = await response.json();
   state.items = Array.isArray(data) ? data.map(normalizeItem) : [];
   return state.items;
+}
+
+async function loadUnits() {
+  const response = await fetchWithTimeout(buildUrl(CONFIG.API_BASE_URL, '/units'), {
+    headers: getAuthHeaders({ Accept: 'application/json' })
+  });
+  if (!response.ok) throw new Error(t('listError'));
+  const data = await response.json();
+  state.units = Array.isArray(data) ? data : [];
+  if (!state.units.some(unit => String(unit.id) === String(state.selectedUnitId))) state.selectedUnitId = '';
+  return state.units;
 }
 
 async function searchByTag(tag) {
@@ -763,6 +780,15 @@ function renderApp(notice = '') {
         </div>
       </div>
 
+      <div class="card panel">
+        <label for="unitFilter">Unidade</label>
+        <select id="unitFilter" class="input">
+          <option value="">Todas as unidades</option>
+          ${state.units.map(unit => `<option value="${escapeHtml(unit.id)}" ${String(unit.id) === String(state.selectedUnitId) ? 'selected' : ''}>${escapeHtml(unit.name)}</option>`).join('')}
+        </select>
+        <small class="subtle">Equipamentos sem unidade aparecem em “Todas as unidades”.</small>
+      </div>
+
       ${renderDeleteConfirm()}
 
       <div class="card panel">
@@ -864,6 +890,16 @@ function bindLoginEvents() {
 
 function bindEvents() {
   bindCreateFormLiveState();
+
+  document.getElementById('unitFilter')?.addEventListener('change', async event => {
+    state.selectedUnitId = event.target.value;
+    try {
+      await loadItems();
+      renderApp();
+    } catch (error) {
+      renderApp(`<div class="notice error">${escapeHtml(error.message || t('listError'))}</div>`);
+    }
+  });
 
   document.getElementById('photoInput')?.addEventListener('change', (event) => {
     updateCreateFormState();
@@ -1148,6 +1184,8 @@ function logoutAdmin() {
   state.showSuperadmin = false;
   state.pendingSelection = null;
   state.items = [];
+  state.units = [];
+  state.selectedUnitId = '';
   state.editingId = null;
   state.editDraft = null;
   state.deleteTargetId = null;
@@ -1205,6 +1243,7 @@ async function boot() {
       state.companyName = identity.company_name;
       state.isSuperadmin = identity.is_superadmin === true;
       syncHeaderLanguage();
+      await loadUnits();
       await loadItems();
       renderApp();
     } else {
