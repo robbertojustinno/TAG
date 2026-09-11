@@ -2,7 +2,7 @@
 from datetime import datetime, timezone
 from sqlalchemy import (Boolean, CheckConstraint, Column, DateTime, ForeignKey,
                         Integer, String, Text, UniqueConstraint, select)
-from sqlalchemy.orm import declarative_base
+from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
 DEFAULT_COMPANY_SLUG = 'empresa-padrao'
@@ -18,6 +18,18 @@ class Company(Base):
     slug = Column(String(100), nullable=False, unique=True, index=True)
     active = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
+    units = relationship('Unit', back_populates='company', passive_deletes='all')
+
+class Unit(Base):
+    __tablename__ = 'units'
+    __table_args__ = (UniqueConstraint('company_id', 'slug', name='uq_unit_company_slug'),)
+    id = Column(Integer, primary_key=True)
+    company_id = Column(Integer, ForeignKey('companies.id', ondelete='RESTRICT'), nullable=False, index=True)
+    name = Column(String(200), nullable=False)
+    slug = Column(String(100), nullable=False)
+    active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
+    company = relationship('Company', back_populates='units')
 
 class User(Base):
     __tablename__ = 'users'

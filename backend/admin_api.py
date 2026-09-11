@@ -6,10 +6,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 if __package__:
-    from .models import Company, User, UserCompany
+    from .models import Company, Unit, User, UserCompany
     from .passwords import hash_password, verify_password
 else:
-    from models import Company, User, UserCompany
+    from models import Company, Unit, User, UserCompany
     from passwords import hash_password, verify_password
 
 Role = Literal['company_admin','supervisor','operator','viewer']
@@ -62,6 +62,10 @@ def user_json(u):
     return {'id': u.id, 'name': u.name, 'email': u.email, 'active': u.active,
             'is_superadmin': u.is_superadmin, 'created_at': u.created_at}
 
+def unit_json(unit):
+    return {'id': unit.id, 'company_id': unit.company_id, 'name': unit.name,
+            'slug': unit.slug, 'active': unit.active, 'created_at': unit.created_at}
+
 def commit(db):
     try:
         db.commit()
@@ -71,6 +75,38 @@ def commit(db):
 
 def build_router(auth):
     router = APIRouter()
+
+    def unit_admin(context=Depends(auth.current)):
+        if not context.is_superadmin and context.role != 'company_admin':
+            raise HTTPException(403, 'Company administrator required')
+        return context
+
+    @router.get('/units')
+    def units(context=Depends(auth.current)):
+        with auth.sessions() as db:
+            return [unit_json(unit) for unit in db.scalars(
+                select(Unit).where(Unit.company_id == context.company_id).order_by(Unit.id))]
+
+    @router.post('/units', status_code=201)
+    def create_unit(payload: NewCompany, context=Depends(unit_admin)):
+        if not payload.name.strip():
+            raise HTTPException(422, 'Unit name is required')
+        with auth.sessions() as db:
+            unit = Unit(company_id=context.company_id, name=payload.name.strip(), slug=payload.slug)
+            db.add(unit)
+            commit(db)
+            return unit_json(unit)
+
+    @router.patch('/units/{unit_id}')
+    def unit_state(unit_id: int, payload: CompanyState, context=Depends(unit_admin)):
+        with auth.sessions() as db:
+            unit = db.scalar(select(Unit).where(Unit.id == unit_id, Unit.company_id == context.company_id))
+            if not unit:
+                raise HTTPException(404, 'Unit not found')
+            unit.active = payload.active
+            commit(db)
+            return unit_json(unit)
+
     # Equal-cost password verification for unknown accounts.
     import secrets
     dummy_hash = hash_password(secrets.token_urlsafe(32))

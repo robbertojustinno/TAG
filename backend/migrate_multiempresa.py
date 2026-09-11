@@ -3,10 +3,10 @@ import os
 from sqlalchemy import create_engine, event, inspect, select, text
 from sqlalchemy.orm import Session
 if __package__:
-    from .models import Base, Company, User, UserCompany, Equipment, DEFAULT_COMPANY_SLUG
+    from .models import Base, Company, Unit, User, UserCompany, Equipment, DEFAULT_COMPANY_SLUG
     from .passwords import hash_password, verify_password
 else:
-    from models import Base, Company, User, UserCompany, Equipment, DEFAULT_COMPANY_SLUG
+    from models import Base, Company, Unit, User, UserCompany, Equipment, DEFAULT_COMPANY_SLUG
     from passwords import hash_password, verify_password
 
 def make_engine(url):
@@ -28,7 +28,7 @@ def migrate(engine, username, password, email):
             connection.execute(text('SELECT pg_advisory_xact_lock(2026091002)'))
         existing = inspect(connection).has_table('tagcheck_equipment')
         before = connection.execute(text('SELECT COUNT(*) FROM tagcheck_equipment')).scalar_one() if existing else 0
-        Base.metadata.create_all(connection, tables=[Company.__table__, User.__table__, UserCompany.__table__])
+        Base.metadata.create_all(connection, tables=[Company.__table__, Unit.__table__, User.__table__, UserCompany.__table__])
         with Session(bind=connection) as db:
             company = db.scalar(select(Company).where(Company.slug == DEFAULT_COMPANY_SLUG))
             if company is None:
