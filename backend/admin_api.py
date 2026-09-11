@@ -191,6 +191,16 @@ def build_router(auth):
             commit(db)
             return user_json(user)
 
+    @router.get('/users/{user_id}/companies')
+    def memberships(user_id: int, _=Depends(auth.superadmin)):
+        with auth.sessions() as db:
+            if not db.get(User, user_id):
+                raise HTTPException(404, 'User not found')
+            return [{'id': link.id, 'user_id': link.user_id, 'company_id': link.company_id,
+                     'role': link.role, 'active': link.active}
+                    for link in db.scalars(select(UserCompany).where(UserCompany.user_id == user_id)
+                                           .order_by(UserCompany.company_id))]
+
     @router.post('/users/{user_id}/companies')
     def associate(user_id: int, payload: Membership, _=Depends(auth.superadmin)):
         with auth.sessions() as db:

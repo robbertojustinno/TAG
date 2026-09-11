@@ -173,6 +173,8 @@ const state = {
   authToken: sessionStorage.getItem(CONFIG.STORAGE_KEYS.authToken) || '',
   authUser: sessionStorage.getItem(CONFIG.STORAGE_KEYS.authUser) || '',
   companyName: '',
+  isSuperadmin: false,
+  showSuperadmin: false,
   pendingSelection: null,
   items: [],
   apiReachable: null,
@@ -223,6 +225,7 @@ function syncHeaderLanguage() {
   const company = document.getElementById('activeCompany');
   company.textContent = state.companyName ? `${t('company')}: ${state.companyName}` : '';
   company.classList.toggle('hidden', !state.authToken || !state.companyName);
+  document.getElementById('superadminButton').classList.toggle('hidden', !state.authToken || !state.isSuperadmin);
 }
 
 function escapeHtml(value) {
@@ -349,6 +352,7 @@ async function finishLogin(result) {
   state.authToken = result.token;
   state.authUser = result.username || identity.email;
   state.companyName = identity.company_name;
+  state.isSuperadmin = identity.is_superadmin === true;
   state.pendingSelection = null;
   sessionStorage.setItem(CONFIG.STORAGE_KEYS.authToken, state.authToken);
   sessionStorage.setItem(CONFIG.STORAGE_KEYS.authUser, state.authUser);
@@ -1140,6 +1144,8 @@ function logoutAdmin() {
   state.authToken = '';
   state.authUser = '';
   state.companyName = '';
+  state.isSuperadmin = false;
+  state.showSuperadmin = false;
   state.pendingSelection = null;
   state.items = [];
   state.editingId = null;
@@ -1160,7 +1166,32 @@ function renderCurrentView(notice = '') {
     return;
   }
 
-  renderApp(notice);
+  if (state.showSuperadmin && state.isSuperadmin) {
+    window.TAGCHECK_SUPERADMIN.mount(app, superadminRequest, escapeHtml, () => {
+      state.showSuperadmin = false;
+      renderCurrentView();
+    });
+  } else renderApp(notice);
+}
+
+async function superadminRequest(path, method = 'GET', data) {
+  if (!state.authToken || !state.isSuperadmin || !state.showSuperadmin) throw new Error('Acesso não autorizado.');
+  const response = await fetchWithTimeout(buildUrl(CONFIG.API_BASE_URL, path), {
+    method, headers: getAuthHeaders({ Accept: 'application/json', 'Content-Type': 'application/json' }),
+    ...(data === undefined ? {} : { body: JSON.stringify(data) })
+  });
+  if (response.status === 403) {
+    state.isSuperadmin = false;
+    state.showSuperadmin = false;
+    renderCurrentView();
+  }
+  if (!response.ok) {
+    const messages = {401: 'Sessão expirada. Entre novamente.', 403: 'Acesso não autorizado.',
+      404: 'Registro não encontrado.', 409: 'Conflito: registro já existente ou tentativa de desativar a empresa da sessão.',
+      422: 'Verifique os campos informados.'};
+    throw new Error(messages[response.status] || 'Não foi possível concluir a operação.');
+  }
+  return response.json();
 }
 
 async function boot() {
@@ -1172,6 +1203,7 @@ async function boot() {
     if (state.authToken) {
       const identity = await readIdentity();
       state.companyName = identity.company_name;
+      state.isSuperadmin = identity.is_superadmin === true;
       syncHeaderLanguage();
       await loadItems();
       renderApp();
@@ -1190,6 +1222,11 @@ async function boot() {
 document.getElementById('langPt').addEventListener('click', () => setLanguage('pt'));
 document.getElementById('langEn').addEventListener('click', () => setLanguage('en'));
 logoutButton.addEventListener('click', logoutAdmin);
+document.getElementById('superadminButton').addEventListener('click', () => {
+  if (!state.authToken || !state.isSuperadmin) return;
+  state.showSuperadmin = true;
+  renderCurrentView();
+});
 
 boot();
 
