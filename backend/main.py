@@ -43,12 +43,12 @@ CLOUDINARY_API_SECRET = required_env("CLOUDINARY_API_SECRET")
 SESSION_TTL_SECONDS = 8 * 60 * 60
 
 if __package__:
-    from .models import Base, Company, User, UserCompany, Equipment, DEFAULT_COMPANY_SLUG
+    from .models import Base, Company, Unit, User, UserCompany, Equipment, DEFAULT_COMPANY_SLUG
     from .migrate_multiempresa import make_engine, migrate
     from .tenancy import Tenancy, CompanyContext, equipment_query
     from .admin_api import build_router
 else:
-    from models import Base, Company, User, UserCompany, Equipment, DEFAULT_COMPANY_SLUG
+    from models import Base, Company, Unit, User, UserCompany, Equipment, DEFAULT_COMPANY_SLUG
     from migrate_multiempresa import make_engine, migrate
     from tenancy import Tenancy, CompanyContext, equipment_query
     from admin_api import build_router
@@ -121,6 +121,8 @@ def build_qr_payload(item: Equipment) -> str:
 def serialize_equipment(item: Equipment) -> dict:
     return {
         "id": item.id,
+        "unit_id": item.unit_id,
+        "unit_name": item.unit.name if item.unit is not None else None,
         "tag": item.tag,
         "name": item.name,
         "photo": item.photo,
@@ -149,11 +151,17 @@ def health():
     return {"ok": True}
 
 
+def validate_equipment_unit(db, unit_id, company_id):
+    if unit_id is not None and not db.query(Unit).filter(Unit.id == unit_id, Unit.company_id == company_id).first():
+        raise HTTPException(status_code=404, detail="Unit not found in the active company")
+
+
 @app.post("/equipment")
 async def create_equipment(
     tag: str = Form(...),
     name: str = Form(...),
     photo: UploadFile = File(...),
+    unit_id: int | None = Form(None, gt=0),
     equipment_type: str = Form(""),
     sector: str = Form(""),
     location: str = Form(""),
@@ -175,6 +183,7 @@ async def create_equipment(
 
     db = SessionLocal()
     try:
+        validate_equipment_unit(db, unit_id, _auth.company_id)
         existing = equipment_query(db, _auth).filter(Equipment.tag == tag.strip()).first()
         if existing:
             raise HTTPException(status_code=400, detail="TAG jÃ¡ cadastrada.")
@@ -190,6 +199,7 @@ async def create_equipment(
 
         item = Equipment(
             company_id=_auth.company_id,
+            unit_id=unit_id,
             tag=tag.strip(),
             name=name.strip(),
             photo=image_url,
@@ -269,9 +279,11 @@ def get_qr_payload(id: int, _auth: CompanyContext = Depends(auth.read_context)):
 @app.put("/equipment/{id}")
 async def update_equipment(
     id: int,
+    request: Request,
     tag: str = Form(...),
     name: str = Form(...),
     photo: UploadFile | None = File(None),
+    unit_id: int | None = Form(None, gt=0),
     equipment_type: str = Form(""),
     sector: str = Form(""),
     location: str = Form(""),
@@ -289,6 +301,11 @@ async def update_equipment(
         item = equipment_query(db, _auth).filter(Equipment.id == id).first()
         if not item:
             raise HTTPException(status_code=404, detail="Equipamento nÃ£o encontrado.")
+
+        # Existing clients omit this field. Only an explicit empty field clears it.
+        if 'unit_id' in await request.form():
+            validate_equipment_unit(db, unit_id, item.company_id)
+            item.unit_id = unit_id
 
         duplicated = equipment_query(db, _auth).filter(
             Equipment.tag == tag.strip(),

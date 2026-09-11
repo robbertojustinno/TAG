@@ -63,6 +63,8 @@ class Equipment(Base):
     id = Column(Integer, primary_key=True, index=True)
     company_id = Column(Integer, ForeignKey('companies.id', ondelete='RESTRICT'), nullable=False,
                         index=True, default=legacy_company_default)
+    unit_id = Column(Integer, ForeignKey('units.id', ondelete='RESTRICT'), nullable=True, index=True)
+    unit = relationship('Unit')
     # Preserve the existing global uniqueness rule; no destructive index migration.
     tag = Column(String, unique=True, index=True, nullable=False)
     name = Column(String, nullable=False)

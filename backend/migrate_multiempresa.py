@@ -58,6 +58,8 @@ def migrate(engine, username, password, email):
             columns = {column['name'] for column in inspect(connection).get_columns('tagcheck_equipment')}
             if 'company_id' not in columns:
                 connection.execute(text('ALTER TABLE tagcheck_equipment ADD COLUMN company_id INTEGER REFERENCES companies(id)'))
+            if 'unit_id' not in columns:
+                connection.execute(text('ALTER TABLE tagcheck_equipment ADD COLUMN unit_id INTEGER REFERENCES units(id) ON DELETE RESTRICT'))
             # Preserve the existing optional-column upgrade for older installations.
             for name in ('equipment_type', 'sector', 'location', 'manufacturer', 'model', 'serial_number', 'calibration_date', 'next_calibration_date', 'status', 'notes'):
                 if name not in columns:
@@ -67,6 +69,7 @@ def migrate(engine, username, password, email):
         if orphaned:
             raise RuntimeError('Migration stopped: invalid existing company association')
         connection.execute(text('CREATE INDEX IF NOT EXISTS ix_tagcheck_equipment_company_id ON tagcheck_equipment(company_id)'))
+        connection.execute(text('CREATE INDEX IF NOT EXISTS ix_tagcheck_equipment_unit_id ON tagcheck_equipment(unit_id)'))
         if engine.dialect.name == 'postgresql':
             connection.execute(text('ALTER TABLE tagcheck_equipment ALTER COLUMN company_id SET NOT NULL'))
         else:
