@@ -187,7 +187,7 @@ class SuperadminBrowserTests(unittest.TestCase):
         expect(self.page.locator('#superadminFeedback')).to_contain_text('Senha redefinida com sucesso')
         options = self.page.locator('#memberRole option')
         self.assertEqual(options.evaluate_all('(items) => items.map(item => [item.value, item.textContent])'), [
-            ['company_admin', 'Administrador da empresa'], ['supervisor', 'Supervisor'],
+            ['company_admin', 'Administrador'], ['supervisor', 'Supervisor'],
             ['operator', 'Operador'], ['viewer', 'Somente leitura']])
         self.assertFalse(self.page.locator('body').evaluate('document.documentElement.scrollWidth > window.innerWidth'))
 
@@ -205,6 +205,33 @@ class SuperadminBrowserTests(unittest.TestCase):
             self.assertTrue(self.page.locator('#userRows [data-edit-user]').count() >= 1)
             self.assertTrue(self.page.locator('#userRows [data-reset-user]').count() >= 1)
             self.assertTrue(self.page.locator('#userRows [data-toggle-user]').count() >= 1)
+
+
+    def test_company_email_policy_and_logo(self):
+        from io import BytesIO
+        from PIL import Image
+        self.open_panel()
+        company = self.create_company()
+        self.page.locator(f'[data-identity-company="{company["id"]}"]').click()
+        form = self.page.locator('#emailPolicyForm')
+        form.locator('[name=admin_email]').fill('admin@alfa.example')
+        form.locator('[name=email_domains]').fill('alfa.example\nsecond.example')
+        form.locator('[name=email_exceptions]').fill('exception@outside.example')
+        form.get_by_role('button').click()
+        expect(self.page.locator('#superadminFeedback')).to_have_text('Configuração salva.')
+        with b.SessionLocal() as db:
+            import json
+            self.assertEqual(json.loads(db.get(b.Company, company['id']).email_domains), ['alfa.example', 'second.example'])
+        out=BytesIO();Image.new('RGB',(8,8),'red').save(out,format='PNG')
+        editor=self.page.locator('#globalLogoEditor')
+        editor.locator('[name=file]').set_input_files({'name':'logo.png','mimeType':'image/png','buffer':out.getvalue()})
+        editor.get_by_role('button',name='Salvar logo').click()
+        expect(editor.locator('[role=status]')).to_contain_text('Logo atualizada')
+        expect(self.page.locator('.brand-logo')).to_have_attribute('src','./public/logo.png')
+        with b.SessionLocal() as db:
+            self.assertIsNotNone(db.get(b.Company,company['id']).logo_data)
+        editor.get_by_role('button',name='Remover logo').click()
+        expect(editor.locator('[role=status]')).to_contain_text('Logo removida')
 
 
 del BrowserFixture  # Do not collect the imported login test class.

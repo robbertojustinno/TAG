@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tagcheck-viewer-v8-qrfix-tenant-safe';
+const CACHE_NAME = 'tagcheck-viewer-v9-company-identity';
 const APP_SHELL = [
   './',
   './index.html',

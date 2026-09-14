@@ -1,8 +1,8 @@
 """Database models. Importing this module never opens or migrates a database."""
 from datetime import datetime, timezone
 from sqlalchemy import (Boolean, CheckConstraint, Column, DateTime, ForeignKey,
-                        Integer, String, Text, UniqueConstraint, select)
-from sqlalchemy.orm import declarative_base, relationship
+                        Integer, String, Text, LargeBinary, UniqueConstraint, select)
+from sqlalchemy.orm import declarative_base, relationship, deferred
 
 Base = declarative_base()
 DEFAULT_COMPANY_SLUG = 'empresa-padrao'
@@ -16,6 +16,12 @@ class Company(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String(200), nullable=False)
     slug = Column(String(100), nullable=False, unique=True, index=True)
+    logo_url = Column(String(300), nullable=True)
+    logo_data = deferred(Column(LargeBinary, nullable=True))
+    logo_mime = Column(String(30), nullable=True)
+    admin_email = Column(String(254), nullable=True)
+    email_domains = Column(Text, nullable=True)
+    email_exceptions = Column(Text, nullable=True)
     active = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
     units = relationship('Unit', back_populates='company', passive_deletes='all')

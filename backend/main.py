@@ -47,11 +47,13 @@ if __package__:
     from .migrate_multiempresa import make_engine, migrate
     from .tenancy import Tenancy, CompanyContext, equipment_query
     from .admin_api import build_router
+    from .company_api import build_company_router
 else:
     from models import Base, Company, Unit, User, UserCompany, Equipment, DEFAULT_COMPANY_SLUG
     from migrate_multiempresa import make_engine, migrate
     from tenancy import Tenancy, CompanyContext, equipment_query
     from admin_api import build_router
+    from company_api import build_company_router
 
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "legacy-admin@tagcheck.invalid").strip().lower()
 engine = make_engine(DATABASE_URL)
@@ -121,6 +123,7 @@ LEGACY_USER_ID = MIGRATION["legacy_user_id"]
 auth = Tenancy(SessionLocal, ADMIN_TOKEN, DEFAULT_COMPANY_ID, LEGACY_USER_ID, ADMIN_USERNAME, ADMIN_PASSWORD)
 app = FastAPI()
 app.include_router(build_router(auth))
+app.include_router(build_company_router(auth))
 
 @app.exception_handler(RequestValidationError)
 async def safe_validation_error(request: Request, exc: RequestValidationError):

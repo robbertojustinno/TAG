@@ -34,6 +34,32 @@ class MigrationTests(unittest.TestCase):
             self.assertEqual(dict(before),dict(after))
             self.assertEqual(c.execute(text('SELECT COUNT(*) FROM users')).scalar_one(),1)
 
+    def test_company_identity_upgrade_preserves_data_and_privileges(self):
+        with self.engine.begin() as c:
+            c.execute(text('CREATE TABLE companies (id INTEGER PRIMARY KEY, name TEXT NOT NULL, slug TEXT UNIQUE NOT NULL, active BOOLEAN NOT NULL, created_at DATETIME NOT NULL)'))
+            c.execute(text("INSERT INTO companies VALUES (77,'Demo','demo',1,CURRENT_TIMESTAMP)"))
+        result = self.migrate()
+        columns = {c['name'] for c in inspect(self.engine).get_columns('companies')}
+        self.assertTrue({'logo_url','logo_data','logo_mime','admin_email','email_domains','email_exceptions'} <= columns)
+        from sqlalchemy.orm import Session
+        from models import Company, User, UserCompany
+        from passwords import hash_password
+        with Session(self.engine) as db:
+            demo=db.get(Company,77)
+            demo.logo_url='/company/logo?v=test';demo.logo_data=b'preserved';demo.logo_mime='image/png'
+            demo.admin_email='demo@example.invalid';demo.email_domains='["example.invalid"]'
+            user=User(name='Demo',email='demo@example.invalid',password_hash=hash_password(self.password),is_superadmin=False)
+            db.add(user);db.flush();uid=user.id
+            db.add(UserCompany(user_id=uid,company_id=77,role='company_admin'));db.commit()
+        self.migrate()
+        with Session(self.engine) as db:
+            demo=db.get(Company,77)
+            self.assertEqual(demo.logo_data,b'preserved')
+            self.assertEqual(demo.admin_email,'demo@example.invalid')
+            self.assertEqual(demo.email_domains,'["example.invalid"]')
+            self.assertFalse(db.get(User,uid).is_superadmin)
+            self.assertTrue(db.get(User,result['legacy_user_id']).is_superadmin)
+
     def test_failure_rolls_back_all_ddl_and_data(self):
         with self.engine.begin() as c:
             c.execute(text('CREATE TABLE tagcheck_equipment (id INTEGER PRIMARY KEY, tag TEXT, name TEXT, photo TEXT, company_id INTEGER)'))

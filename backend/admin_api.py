@@ -1,6 +1,7 @@
 """Authentication and superadmin endpoints, with explicit safe response fields."""
 from typing import Literal
 import re
+import json
 from fastapi import APIRouter, Depends, Header, HTTPException, Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select
@@ -36,10 +37,36 @@ class CompanyUpdate(Input):
     name: str | None = Field(default=None, max_length=200)
     slug: str | None = Field(default=None, pattern=r'^[a-z0-9]+(?:-[a-z0-9]+)*$', max_length=100)
     active: bool | None = None
+    admin_email: str | None = Field(default=None, max_length=254)
+    email_domains: list[str] | None = Field(default=None, max_length=100)
+    email_exceptions: list[str] | None = Field(default=None, max_length=100)
+
+    @field_validator('email_domains', 'email_exceptions')
+    @classmethod
+    def validate_email_policy(cls, values, info):
+        if values is None:
+            raise ValueError('Use an empty list to clear the policy')
+        result = []
+        for value in values:
+            value = value.strip().lower()
+            pattern = r'[^\s@]+@[^\s@]+\.[^\s@]+' if info.field_name == 'email_exceptions' else r'(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}'
+            if len(value) > 254 or not re.fullmatch(pattern, value):
+                raise ValueError('Invalid email policy')
+            result.append(value)
+        return sorted(set(result))
+
+    @field_validator('admin_email')
+    @classmethod
+    def validate_admin_email(cls, value):
+        if value is None or value == '':
+            return None
+        return NewUser.normalize_email(value)
 
     @field_validator('name')
     @classmethod
     def normalize_company_name(cls, value):
+        if value is None:
+            return None
         value = value.strip()
         if not value:
             raise ValueError('Company name is required')
@@ -50,7 +77,6 @@ class NewUser(Input):
     email: str = Field(max_length=254)
     password: str = Field(min_length=12, max_length=1024)
     active: bool = True
-    is_superadmin: bool = False
 
     @field_validator('email')
     @classmethod
@@ -68,6 +94,8 @@ class UserState(Input):
     @field_validator('name')
     @classmethod
     def normalize_user_name(cls, value):
+        if value is None:
+            return None
         value = value.strip()
         if not value:
             raise ValueError('User name is required')
@@ -76,6 +104,8 @@ class UserState(Input):
     @field_validator('email')
     @classmethod
     def normalize_user_email(cls, value):
+        if value is None:
+            return None
         value = value.strip().lower()
         if not re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+', value):
             raise ValueError('Invalid email')
@@ -90,7 +120,9 @@ class Membership(Input):
     active: bool = True
 
 def company_json(c):
-    return {'id': c.id, 'name': c.name, 'slug': c.slug, 'active': c.active, 'created_at': c.created_at}
+    return {'id': c.id, 'name': c.name, 'slug': c.slug, 'active': c.active, 'created_at': c.created_at, 'logo_url': c.logo_url, 'admin_email': c.admin_email,
+            'email_domains': json.loads(c.email_domains or '[]'),
+            'email_exceptions': json.loads(c.email_exceptions or '[]')}
 
 def user_json(u):
     return {'id': u.id, 'name': u.name, 'email': u.email, 'active': u.active,
@@ -201,9 +233,10 @@ def build_router(auth):
     @router.get('/auth/me')
     def me(context=Depends(auth.current)):
         with auth.sessions() as db:
-            company_name = db.get(Company, context.company_id).name
+            company = db.get(Company, context.company_id)
+            company_name, logo_url = company.name, company.logo_url
         return {'user_id': context.user_id, 'email': context.email, 'company_id': context.company_id,
-                'company_name': company_name,
+                'company_name': company_name, 'logo_url': logo_url,
                 'role': context.role, 'is_superadmin': context.is_superadmin}
 
     @router.get('/companies')
@@ -229,6 +262,11 @@ def build_router(auth):
             item = db.get(Company, company_id)
             if not item:
                 raise HTTPException(404, 'Company not found')
+            for field in ('email_domains', 'email_exceptions'):
+                if field in payload.model_fields_set:
+                    setattr(item, field, json.dumps(getattr(payload, field)))
+            if 'admin_email' in payload.model_fields_set:
+                item.admin_email = payload.admin_email
             if payload.name is not None:
                 item.name = payload.name
             if payload.slug is not None:
@@ -249,7 +287,7 @@ def build_router(auth):
             if not payload.name.strip():
                 raise HTTPException(422, 'User name is required')
             user = User(name=payload.name.strip(), email=payload.email, password_hash=hash_password(payload.password),
-                        active=payload.active, is_superadmin=payload.is_superadmin)
+                        active=payload.active, is_superadmin=False)
             db.add(user)
             commit(db)
             return user_json(user)

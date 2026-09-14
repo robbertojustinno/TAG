@@ -83,6 +83,11 @@ def migrate(engine, username, password, email):
             connection.execute(text('LOCK TABLE tagcheck_equipment IN SHARE ROW EXCLUSIVE MODE'))
         before = connection.execute(text('SELECT COUNT(*) FROM tagcheck_equipment')).scalar_one() if existing else 0
         Base.metadata.create_all(connection, tables=[Company.__table__, Unit.__table__, User.__table__, UserCompany.__table__])
+        company_columns = {c['name'] for c in inspect(connection).get_columns('companies')}
+        for name in ('logo_url', 'logo_data', 'logo_mime', 'admin_email', 'email_domains', 'email_exceptions'):
+            if name not in company_columns:
+                sql_type = Company.__table__.c[name].type.compile(dialect=connection.dialect)
+                connection.execute(text(f'ALTER TABLE companies ADD COLUMN {name} {sql_type}'))
         with Session(bind=connection) as db:
             company = db.scalar(select(Company).where(Company.slug == DEFAULT_COMPANY_SLUG))
             if company is None:

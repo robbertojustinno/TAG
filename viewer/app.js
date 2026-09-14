@@ -1,3 +1,5 @@
+let viewerLogoObjectUrl = null;
+let viewerLogoVersion = 0;
 const CONFIG = window.TAGCHECK_VIEWER_CONFIG;
 const app = document.getElementById('app');
 const backButton = document.getElementById('backButton');
@@ -17,10 +19,11 @@ const state = {
 };
 
 function syncViewerIdentity() {
+  refreshViewerLogo();
   document.getElementById('authButton').textContent = state.authToken ? 'Sair' : 'Entrar';
   document.getElementById('activeCompany').textContent = state.identity
     ? `Empresa: ${state.identity.company_name}`
-    : state.authToken ? 'Verificando sessão…' : 'Empresa Padrão · Público';
+    : state.authToken ? 'Verificando sessão…' : 'Consulta pública';
 }
 
 function clearViewerSession() {
@@ -974,3 +977,23 @@ async function boot() {
 }
 
 boot();
+
+
+async function refreshViewerLogo() {
+  const version = ++viewerLogoVersion;
+  const img = document.querySelector('.brand-logo');
+  if (viewerLogoObjectUrl) URL.revokeObjectURL(viewerLogoObjectUrl);
+  viewerLogoObjectUrl = null;
+  img.src = './public/logo.png';
+  if (!state.authToken || !state.identity?.logo_url) return;
+  try {
+    const response = await fetch(`${CONFIG.API_BASE_URL.replace(/\/$/, '')}${state.identity.logo_url}`, {
+      headers: {Authorization: `Bearer ${state.authToken}`}, cache: 'no-store'
+    });
+    if (!response.ok) return;
+    const blob = await response.blob();
+    if (version !== viewerLogoVersion) return;
+    viewerLogoObjectUrl = URL.createObjectURL(blob);
+    img.src = viewerLogoObjectUrl;
+  } catch (_) { /* Standard identity remains available. */ }
+}

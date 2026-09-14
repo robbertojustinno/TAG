@@ -7,7 +7,7 @@ const I18N = {
   pt: {
     brandTitle: 'TagCheck • Smart Asset Tracking',
     brandSubtitle: 'Powered by Rovix Automation™ ⚡',
-    heroTitle: 'Admin V4',
+    heroTitle: 'Painel',
     heroText: 'Cadastro, consulta e gestão completa de equipamentos e instrumentos.',
     apiOk: 'API online',
     apiFail: 'API indisponível',
@@ -46,7 +46,7 @@ const I18N = {
     logout: 'Sair',
     loginTitle: 'Login do Admin',
     loginSubtitle: 'Acesso protegido ao painel de gestão.',
-    username: 'E-mail ou usuário legado',
+    username: 'E-mail',
     company: 'Empresa',
     selectCompany: 'Selecionar empresa',
     companySubtitle: 'Escolha a empresa para acessar o painel.',
@@ -86,7 +86,7 @@ const I18N = {
   en: {
     brandTitle: 'TagCheck • Smart Asset Tracking',
     brandSubtitle: 'Powered by Rovix Automation™ ⚡',
-    heroTitle: 'Admin V4',
+    heroTitle: 'Painel',
     heroText: 'Complete registration, lookup and management for equipment and instruments.',
     apiOk: 'API online',
     apiFail: 'API unavailable',
@@ -215,8 +215,10 @@ function setLanguage(lang) {
 }
 
 function syncHeaderLanguage() {
-  document.getElementById('brandTitle').textContent = t('brandTitle');
-  document.getElementById('brandSubtitle').textContent = t('brandSubtitle');
+  document.getElementById('brandTitle').textContent = 'TAGCHECK';
+  document.getElementById('brandSubtitle').textContent = state.authToken ? '' : t('brandSubtitle');
+  document.getElementById('companyAdminButton').classList.toggle('hidden', !state.authToken || state.role !== 'company_admin' || state.isSuperadmin);
+  document.querySelector('.footer-note')?.classList.toggle('hidden', !!state.authToken);
   document.getElementById('langPt').className = state.language === 'pt'
     ? 'secondary-button lang-button active'
     : 'outline-button lang-button';
@@ -370,6 +372,7 @@ async function readIdentity(token = state.authToken) {
     throw new Error(t('loginError'));
   }
   const identity = await response.json();
+  state.logoUrl = identity.logo_url;
   state.role = identity.role || '';
   return identity;
 }
@@ -385,6 +388,7 @@ async function finishLogin(result) {
   sessionStorage.setItem(CONFIG.STORAGE_KEYS.authToken, state.authToken);
   sessionStorage.setItem(CONFIG.STORAGE_KEYS.authUser, state.authUser);
   syncHeaderLanguage();
+  await refreshCompanyLogo();
   await loadUnits();
   await loadItems();
   if (state.authToken) renderApp();
@@ -1238,6 +1242,9 @@ window.askDeleteItem = function(id) {
 };
 
 function logoutAdmin() {
+  state.showCompanyAdmin = false;
+  state.logoUrl = null;
+  clearCompanyLogo();
   state.authToken = '';
   state.authUser = '';
   state.role = '';
@@ -1266,32 +1273,44 @@ function renderCurrentView(notice = '') {
     return;
   }
 
-  if (state.showSuperadmin && state.isSuperadmin) {
+  if (state.showCompanyAdmin && state.role === 'company_admin' && !state.isSuperadmin) {
+    window.TAGCHECK_COMPANY.mount(app, companyRequest, escapeHtml, () => {
+      state.showCompanyAdmin = false; renderCurrentView();
+    }, refreshCompanyIdentity);
+  } else if (state.showSuperadmin && state.isSuperadmin) {
     window.TAGCHECK_SUPERADMIN.mount(app, superadminRequest, escapeHtml, () => {
       state.showSuperadmin = false;
       renderCurrentView();
-    });
+    }, refreshCompanyIdentity);
   } else renderApp(notice);
 }
 
-async function superadminRequest(path, method = 'GET', data) {
+async function superadminRequest(path, method = 'GET', data, blob = false) {
   if (!state.authToken || !state.isSuperadmin || !state.showSuperadmin) throw new Error('Acesso não autorizado.');
+  return companyRequest(path, method, data, blob);
+}
+
+async function companyRequest(path, method = 'GET', data, blob = false) {
+  if (!state.authToken) throw new Error('Entre novamente.');
+  const multipart = data instanceof FormData;
   const response = await fetchWithTimeout(buildUrl(CONFIG.API_BASE_URL, path), {
-    method, headers: getAuthHeaders({ Accept: 'application/json', 'Content-Type': 'application/json' }),
-    ...(data === undefined ? {} : { body: JSON.stringify(data) })
+    method, headers: getAuthHeaders(multipart ? {} : { 'Content-Type': 'application/json' }),
+    ...(data === undefined ? {} : { body: multipart ? data : JSON.stringify(data) })
   });
   if (response.status === 403) {
     state.isSuperadmin = false;
     state.showSuperadmin = false;
+    state.showCompanyAdmin = false;
+    state.role = '';
     renderCurrentView();
   }
   if (!response.ok) {
     const messages = {401: 'Sessão expirada. Entre novamente.', 403: 'Acesso não autorizado.',
-      404: 'Registro não encontrado.', 409: 'Conflito: registro já existente ou tentativa de desativar a empresa da sessão.',
-      422: 'Verifique os campos informados.'};
+      404: 'Registro não encontrado.', 409: 'Não foi possível salvar. Verifique os dados ou contate o suporte administrativo.',
+      422: 'Verifique os campos informados, o domínio do e-mail e o formato da imagem.'};
     throw new Error(messages[response.status] || 'Não foi possível concluir a operação.');
   }
-  return response.json();
+  return blob ? response.blob() : response.json();
 }
 
 async function boot() {
@@ -1305,6 +1324,7 @@ async function boot() {
       state.companyName = identity.company_name;
       state.isSuperadmin = identity.is_superadmin === true;
       syncHeaderLanguage();
+      await refreshCompanyLogo();
       await loadUnits();
       await loadItems();
       renderApp();
@@ -1323,6 +1343,11 @@ async function boot() {
 document.getElementById('langPt').addEventListener('click', () => setLanguage('pt'));
 document.getElementById('langEn').addEventListener('click', () => setLanguage('en'));
 logoutButton.addEventListener('click', logoutAdmin);
+document.getElementById('companyAdminButton').addEventListener('click', () => {
+  if (!state.authToken || state.role !== 'company_admin' || state.isSuperadmin) return;
+  state.showCompanyAdmin = true; renderCurrentView();
+});
+
 document.getElementById('superadminButton').addEventListener('click', () => {
   if (!state.authToken || !state.isSuperadmin) return;
   state.showSuperadmin = true;
@@ -1361,4 +1386,30 @@ async function openEquipmentPdf() {
     const feedback = document.getElementById('searchFeedback');
     if (feedback) feedback.textContent = error.message;
   }
+}
+
+let companyLogoObjectUrl = null;
+function clearCompanyLogo() {
+  if (companyLogoObjectUrl) URL.revokeObjectURL(companyLogoObjectUrl);
+  companyLogoObjectUrl = null;
+  document.querySelector('.brand-logo').src = './public/logo.png';
+}
+async function refreshCompanyLogo() {
+  clearCompanyLogo();
+  const token = state.authToken, url = state.logoUrl;
+  if (!token || !url) return;
+  try {
+    const response = await fetchWithTimeout(buildUrl(CONFIG.API_BASE_URL, url), {headers: getAuthHeaders()});
+    if (!response.ok) return;
+    const blob = await response.blob();
+    if (state.authToken !== token || state.logoUrl !== url) return;
+    companyLogoObjectUrl = URL.createObjectURL(blob);
+    document.querySelector('.brand-logo').src = companyLogoObjectUrl;
+  } catch (_) { /* Keep the standard identity if the image is unavailable. */ }
+}
+async function refreshCompanyIdentity() {
+  const identity = await readIdentity();
+  state.companyName = identity.company_name;
+  syncHeaderLanguage();
+  await refreshCompanyLogo();
 }

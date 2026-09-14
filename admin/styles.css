@@ -808,3 +808,5 @@ textarea {
   #superadminPanel tbody td .inline-actions { justify-content: flex-start; }
   #superadminPanel tbody td .inline-actions button { flex: 1 1 110px; }
 }
+
+.company-logo-preview { width: 180px; height: 100px; object-fit: contain; margin: 12px 0; }

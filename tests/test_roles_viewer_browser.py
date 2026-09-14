@@ -55,6 +55,29 @@ class RolesViewerBrowserTests(fixture.AdminLoginBrowserTests):
         self.page.locator('#tagInput').fill(tag)
         self.page.locator('#searchButton').click()
 
+    def test_viewer_logo_follows_session_and_clears_on_logout(self):
+        from io import BytesIO
+        from PIL import Image
+        out=BytesIO();Image.new('RGB',(8,8),'blue').save(out,format='PNG')
+        with b.SessionLocal() as db:
+            company=db.get(b.Company,self.a)
+            company.logo_url='/company/logo?v=browser-test'
+            company.logo_data=out.getvalue();company.logo_mime='image/png';db.commit()
+        try:
+            self.page.goto(self.base+'/ui-viewer/index.html')
+            self.viewer_login()
+            self.page.wait_for_function("document.querySelector('.brand-logo').src.startsWith('blob:')")
+            expect(self.page.locator('#activeCompany')).to_have_text('Empresa: Empresa A')
+            self.page.locator('#authButton').click()
+            expect(self.page.locator('.brand-logo')).to_have_attribute('src','./public/logo.png')
+            self.viewer_login('multi@example.invalid',self.z)
+            expect(self.page.locator('#activeCompany')).to_have_text('Empresa: Empresa B')
+            expect(self.page.locator('.brand-logo')).to_have_attribute('src','./public/logo.png')
+        finally:
+            with b.SessionLocal() as db:
+                company=db.get(b.Company,self.a)
+                company.logo_url=company.logo_data=company.logo_mime=None;db.commit()
+
     def test_admin_role_controls(self):
         for role in ('company_admin', 'supervisor', 'operator', 'viewer'):
             with self.subTest(role=role):
