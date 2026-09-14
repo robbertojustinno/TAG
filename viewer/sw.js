@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tagcheck-viewer-v9-company-identity';
+const CACHE_NAME = 'tagcheck-viewer-v10-fresh-assets';
 const APP_SHELL = [
   './',
   './index.html',
@@ -12,15 +12,14 @@ const APP_SHELL = [
 ];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));
+  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL.map((url) => new Request(url, { cache: 'reload' })))));
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))))
+    caches.keys().then((keys) => Promise.all(keys.filter((key) => key.startsWith('tagcheck-viewer-') && key !== CACHE_NAME).map((key) => caches.delete(key)))).then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
 self.addEventListener('fetch', (event) => {
@@ -37,13 +36,25 @@ self.addEventListener('fetch', (event) => {
 
   if (isAppShell) {
     event.respondWith(
-      fetch(event.request)
+      fetch(event.request, { cache: 'no-store' })
         .then((response) => {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
-          return response;
+          if (response.ok) {
+            const copy = response.clone();
+            event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy)));
+          }
+          const headers = new Headers(response.headers);
+          headers.set('Cache-Control', 'no-store');
+          return new Response(response.body, {
+            status: response.status, statusText: response.statusText, headers
+          });
         })
-        .catch(() => caches.match(event.request).then((cached) => cached || caches.match('./index.html')))
+        .catch(async () => {
+          const cache = await caches.open(CACHE_NAME);
+          const cached = await cache.match(event.request);
+          if (cached) return cached;
+          if (event.request.mode === 'navigate') return cache.match('./index.html');
+          return Response.error();
+        })
     );
     return;
   }

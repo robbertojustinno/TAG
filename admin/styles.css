@@ -810,3 +810,9 @@ textarea {
 }
 
 .company-logo-preview { width: 180px; height: 100px; object-fit: contain; margin: 12px 0; }
+
+/* Windows native menus need explicit option colors in the dark theme. */
+select option {
+  color: #111827;
+  background: #ffffff;
+}
