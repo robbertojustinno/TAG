@@ -68,7 +68,7 @@ class Tenancy:
         except (jwt.PyJWTError, ValueError, TypeError, KeyError):
             raise HTTPException(401, 'Invalid or expired session') from None
 
-    def validate_identity(self, db, claims):
+    def validate_identity(self, db, claims, allow_password_change=False):
         user = db.get(User, claims['user_id'])
         if not user or not user.active:
             raise HTTPException(403, 'User is inactive or unavailable')
@@ -76,6 +76,8 @@ class Tenancy:
             raise HTTPException(401, 'Session no longer valid')
         if claims['is_superadmin'] != bool(user.is_superadmin):
             raise HTTPException(403, 'Permissions changed; sign in again')
+        if user.must_change_password and not allow_password_change:
+            raise HTTPException(403, 'Password change required')
         return user
 
     def membership(self, db, user_id, company_id):
@@ -106,6 +108,8 @@ class Tenancy:
             user = db.get(User, self.legacy_user_id)
             if not user or not user.active or not verify_password(user.password_hash, self.password):
                 raise HTTPException(403, 'Legacy user is inactive or credentials changed')
+            if user.must_change_password:
+                raise HTTPException(403, 'Password change required')
             link = self.membership(db, user.id, self.default_company_id)
             # Pre-migration sessions cannot acquire new global administration powers.
             return CompanyContext(user.id, user.email, link.company_id, link.role, False, True)

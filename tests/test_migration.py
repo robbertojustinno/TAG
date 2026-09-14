@@ -16,6 +16,31 @@ class MigrationTests(unittest.TestCase):
     def migrate(self):
         return migrate(self.engine,'legacy',self.password,'legacy@example.invalid')
 
+    def test_password_flag_upgrade_preserves_existing_users_and_demo_hashes(self):
+        from passwords import DEMO_EMAILS, hash_password
+        encoded = hash_password(self.password)
+        emails = sorted(DEMO_EMAILS) + ['existing-real@example.invalid']
+        with self.engine.begin() as c:
+            c.execute(text('CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, active BOOLEAN NOT NULL, is_superadmin BOOLEAN NOT NULL, created_at DATETIME NOT NULL)'))
+            for index, email in enumerate(emails, 20):
+                c.execute(text('INSERT INTO users VALUES (:id, :name, :email, :hash, true, false, CURRENT_TIMESTAMP)'),
+                          {'id': index, 'name': 'Existing', 'email': email, 'hash': encoded})
+        self.migrate()
+        self.migrate()
+        column = next(c for c in inspect(self.engine).get_columns('users') if c['name'] == 'must_change_password')
+        self.assertFalse(column['nullable'])
+        with self.engine.begin() as c:
+            rows = c.execute(text('SELECT email, password_hash, must_change_password FROM users WHERE id BETWEEN 20 AND 24')).all()
+            self.assertEqual(len(rows), 5)
+            for email, password_hash, required in rows:
+                self.assertIn(email, emails)
+                self.assertEqual(password_hash, encoded)
+                self.assertFalse(required)
+            c.execute(text('UPDATE users SET must_change_password=true WHERE email=:email'), {'email': emails[-1]})
+        self.migrate()
+        with self.engine.connect() as c:
+            self.assertTrue(c.execute(text('SELECT must_change_password FROM users WHERE email=:email'), {'email': emails[-1]}).scalar_one())
+
     def test_legacy_rows_ids_and_idempotence(self):
         with self.engine.begin() as c:
             c.execute(text('CREATE TABLE tagcheck_equipment (id INTEGER PRIMARY KEY, tag TEXT UNIQUE NOT NULL, name TEXT NOT NULL, photo TEXT NOT NULL, notes TEXT)'))

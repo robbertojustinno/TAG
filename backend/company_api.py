@@ -12,11 +12,11 @@ from sqlalchemy.exc import IntegrityError
 if __package__:
     from .models import Company, User, UserCompany
     from .admin_api import NewUser, UserState, ResetPassword, commit
-    from .passwords import hash_password
+    from .passwords import hash_password, is_demo_account
 else:
     from models import Company, User, UserCompany
     from admin_api import NewUser, UserState, ResetPassword, commit
-    from passwords import hash_password
+    from passwords import hash_password, is_demo_account
 
 LocalRole = Literal['supervisor', 'operator', 'viewer']
 
@@ -81,7 +81,7 @@ def build_company_router(auth):
         with auth.sessions() as db:
             validate_domain(db.get(Company, context.company_id), payload.email)
             user = User(name=payload.name.strip(), email=payload.email, password_hash=hash_password(payload.password),
-                        active=True, is_superadmin=False)
+                        active=True, is_superadmin=False, must_change_password=True)
             db.add(user)
             try:
                 db.flush()
@@ -121,6 +121,7 @@ def build_company_router(auth):
             user, link = target(db, context, user_id)
             check_shared(db, user, context.company_id)
             user.password_hash = hash_password(payload.password)
+            user.must_change_password = not is_demo_account(user)
             commit(db)
             return {'ok': True}
 

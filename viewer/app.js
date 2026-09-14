@@ -9,6 +9,7 @@ const state = {
   screen: 'home',
   authToken: sessionStorage.getItem(CONFIG.STORAGE_KEYS.authToken) || '',
   identity: null,
+  pendingPassword: sessionStorage.getItem(CONFIG.STORAGE_KEYS.authToken + '.password_change') || '',
   pendingSelection: null,
   sessionVersion: 0,
   currentItem: null,
@@ -19,6 +20,7 @@ const state = {
 };
 
 function syncViewerIdentity() {
+  document.querySelector('.topbar-actions').classList.toggle('hidden', !!state.pendingPassword);
   refreshViewerLogo();
   document.getElementById('authButton').textContent = state.authToken ? 'Sair' : 'Entrar';
   document.getElementById('activeCompany').textContent = state.identity
@@ -27,6 +29,8 @@ function syncViewerIdentity() {
 }
 
 function clearViewerSession() {
+  state.pendingPassword = '';
+  sessionStorage.removeItem(CONFIG.STORAGE_KEYS.authToken + '.password_change');
   state.sessionVersion += 1;
   state.authToken = '';
   state.identity = null;
@@ -50,15 +54,25 @@ async function viewerAuthRequest(path, data, token = '') {
       ...(token ? {Authorization: `Bearer ${token}`} : {})},
     ...(data ? {body: JSON.stringify(data)} : {})
   });
-  if (!response.ok) throw new Error('Não foi possível entrar. Verifique suas credenciais e o acesso à empresa.');
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(path === '/auth/change-password' && typeof error.detail === 'string'
+      ? error.detail : 'Não foi possível concluir. Verifique as credenciais e os campos informados.');
+  }
   const result = await response.json();
   if (version !== state.sessionVersion) throw new Error('Sessão alterada. Consulte novamente.');
   return result;
 }
 
 async function finishViewerLogin(result) {
+  if (result.must_change_password) return requireViewerPasswordChange(result.token);
+  if (result.requires_company_selection) {
+    state.pendingSelection = result;
+    return renderViewerLogin();
+  }
   if (!result.token) throw new Error('Sessão inválida. Entre novamente.');
   const identity = await viewerAuthRequest('/auth/me', null, result.token);
+  if (identity.must_change_password) return requireViewerPasswordChange(result.token);
   state.sessionVersion += 1;
   state.authToken = result.token;
   state.identity = identity;
@@ -67,6 +81,55 @@ async function finishViewerLogin(result) {
   sessionStorage.setItem(CONFIG.STORAGE_KEYS.authToken, result.token);
   syncViewerIdentity();
   await openInitialQuery();
+}
+
+function requireViewerPasswordChange(token) {
+  destroyScanner();
+  clearViewerSession();
+  state.pendingPassword = token;
+  sessionStorage.setItem(CONFIG.STORAGE_KEYS.authToken + '.password_change', token);
+  renderViewerPasswordChange();
+}
+
+function renderViewerPasswordChange() {
+  destroyScanner();
+  state.screen = 'password_change';
+  backButton.classList.add('hidden');
+  syncViewerIdentity();
+  app.innerHTML = `<section class="screen"><form id="changePasswordForm" class="card panel">
+    <h2 class="login-title">Defina sua nova senha</h2>
+    <p class="login-subtitle">Use uma senha própria com pelo menos 12 caracteres.</p>
+    <div class="login-stack">
+      <label>Senha atual<input name="current_password" class="input" type="password" autocomplete="current-password" maxlength="1024" required></label>
+      <label>Nova senha<input name="new_password" class="input" type="password" autocomplete="new-password" minlength="12" maxlength="1024" required></label>
+      <label>Confirmar nova senha<input name="confirm_password" class="input" type="password" autocomplete="new-password" minlength="12" maxlength="1024" required></label>
+    </div>
+    <div class="inline-actions"><button class="primary-button">Alterar senha</button>
+      <button id="cancelPasswordChange" class="outline-button" type="button">Sair</button></div>
+    <div id="passwordFeedback" role="alert"></div>
+  </form></section>`;
+  document.getElementById('cancelPasswordChange').addEventListener('click', logoutViewer);
+  document.getElementById('changePasswordForm').addEventListener('submit', async event => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const token = state.pendingPassword;
+    const controls = [...form.querySelectorAll('button')];
+    controls.forEach(button => button.disabled = true);
+    try {
+      const result = await viewerAuthRequest('/auth/change-password', Object.fromEntries(new FormData(form)), token);
+      if (token !== state.pendingPassword) return;
+      state.pendingPassword = '';
+      sessionStorage.removeItem(CONFIG.STORAGE_KEYS.authToken + '.password_change');
+      syncViewerIdentity();
+      await finishViewerLogin(result);
+    } catch (error) {
+      if (token === state.pendingPassword) document.getElementById('passwordFeedback').textContent = error.message;
+      else renderViewerLogin();
+    } finally {
+      form.reset();
+      controls.forEach(button => button.disabled = false);
+    }
+  });
 }
 
 function renderViewerLogin(message = '') {
@@ -520,6 +583,7 @@ function updateUrl(item) {
 }
 
 function renderHome() {
+  if (state.pendingPassword) return renderViewerPasswordChange();
   state.screen = 'home';
   state.currentItem = null;
   state.currentNotice = '';
@@ -963,9 +1027,18 @@ document.getElementById('authButton').addEventListener('click', () => {
 
 async function boot() {
   syncViewerIdentity();
+  if (state.pendingPassword) {
+    try {
+      const identity = await viewerAuthRequest('/auth/me', null, state.pendingPassword);
+      if (identity.must_change_password) return renderViewerPasswordChange();
+    } catch {}
+    clearViewerSession();
+    return renderViewerLogin('Sessão expirada. Entre novamente.');
+  }
   if (state.authToken) {
     try {
       state.identity = await viewerAuthRequest('/auth/me', null, state.authToken);
+      if (state.identity.must_change_password) return requireViewerPasswordChange(state.authToken);
       syncViewerIdentity();
     } catch {
       renderViewerLogin('Não foi possível validar sua sessão. Entre novamente ou continue sem login.');

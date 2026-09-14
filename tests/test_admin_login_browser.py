@@ -70,7 +70,7 @@ class AdminLoginBrowserTests(unittest.TestCase):
         b.engine.dispose()
 
     def setUp(self):
-        self.context = self.browser.new_context()
+        self.context = self.browser.new_context(service_workers='block')
         self.context.route('**/*', self.route)
         self.page = self.context.new_page()
         self.errors = []
@@ -87,7 +87,7 @@ class AdminLoginBrowserTests(unittest.TestCase):
     def route(self, route):
         if not route.request.url.startswith(self.base + '/'):
             route.abort()
-        elif route.request.url.endswith('/config.js'):
+        elif route.request.url.split('?', 1)[0].endswith('/config.js'):
             source = (ROOT / 'admin/config.js').read_text(encoding='utf-8')
             source = re.sub(r"API_BASE_URL:\s*'[^']*'", f"API_BASE_URL: '{self.base}'", source)
             route.fulfill(status=200, content_type='application/javascript', body=source)

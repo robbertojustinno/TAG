@@ -83,6 +83,9 @@ def migrate(engine, username, password, email):
             connection.execute(text('LOCK TABLE tagcheck_equipment IN SHARE ROW EXCLUSIVE MODE'))
         before = connection.execute(text('SELECT COUNT(*) FROM tagcheck_equipment')).scalar_one() if existing else 0
         Base.metadata.create_all(connection, tables=[Company.__table__, Unit.__table__, User.__table__, UserCompany.__table__])
+        user_columns = {c['name'] for c in inspect(connection).get_columns('users')}
+        if 'must_change_password' not in user_columns:
+            connection.execute(text('ALTER TABLE users ADD COLUMN must_change_password BOOLEAN NOT NULL DEFAULT false'))
         company_columns = {c['name'] for c in inspect(connection).get_columns('companies')}
         for name in ('logo_url', 'logo_data', 'logo_mime', 'admin_email', 'email_domains', 'email_exceptions'):
             if name not in company_columns:

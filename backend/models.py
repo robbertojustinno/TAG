@@ -1,7 +1,7 @@
 """Database models. Importing this module never opens or migrates a database."""
 from datetime import datetime, timezone
 from sqlalchemy import (Boolean, CheckConstraint, Column, DateTime, ForeignKey,
-                        Integer, String, Text, LargeBinary, UniqueConstraint, select)
+                        Integer, String, Text, LargeBinary, UniqueConstraint, select, false)
 from sqlalchemy.orm import declarative_base, relationship, deferred
 
 Base = declarative_base()
@@ -43,6 +43,7 @@ class User(Base):
     name = Column(String(200), nullable=False)
     email = Column(String(254), nullable=False, unique=True, index=True)
     password_hash = Column(String(512), nullable=False)
+    must_change_password = Column(Boolean, nullable=False, default=False, server_default=false())
     active = Column(Boolean, nullable=False, default=True)
     is_superadmin = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)

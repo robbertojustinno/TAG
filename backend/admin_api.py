@@ -2,16 +2,16 @@
 from typing import Literal
 import re
 import json
-from fastapi import APIRouter, Depends, Header, HTTPException, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Response, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 if __package__:
     from .models import Company, Unit, User, UserCompany
-    from .passwords import hash_password, verify_password
+    from .passwords import hash_password, verify_password, is_demo_account
 else:
     from models import Company, Unit, User, UserCompany
-    from passwords import hash_password, verify_password
+    from passwords import hash_password, verify_password, is_demo_account
 
 Role = Literal['company_admin','supervisor','operator','viewer']
 
@@ -114,6 +114,11 @@ class UserState(Input):
 class ResetPassword(Input):
     password: str = Field(min_length=12, max_length=1024)
 
+class ChangePassword(Input):
+    current_password: str = Field(max_length=1024)
+    new_password: str = Field(min_length=12, max_length=1024)
+    confirm_password: str = Field(max_length=1024)
+
 class Membership(Input):
     company_id: int = Field(gt=0, strict=True)
     role: Role
@@ -126,7 +131,8 @@ def company_json(c):
 
 def user_json(u):
     return {'id': u.id, 'name': u.name, 'email': u.email, 'active': u.active,
-            'is_superadmin': u.is_superadmin, 'created_at': u.created_at}
+            'is_superadmin': u.is_superadmin, 'created_at': u.created_at,
+            'must_change_password': u.must_change_password}
 
 def unit_json(unit):
     return {'id': unit.id, 'company_id': unit.company_id, 'name': unit.name,
@@ -177,6 +183,63 @@ def build_router(auth):
     import secrets
     dummy_hash = hash_password(secrets.token_urlsafe(32))
 
+    def login_result(db, user, legacy=False, company_id=None):
+        companies = auth.permitted_companies(db, user.id)
+        if legacy:
+            companies = [(c, m) for c, m in companies if c.id == auth.default_company_id]
+        if not companies:
+            raise HTTPException(403, 'No active company is associated with this user')
+        if user.must_change_password:
+            return {'ok': True, 'must_change_password': True,
+                    'token': auth.issue(user, purpose='password_change', ttl=900, legacy=legacy),
+                    'expires_in': 900, 'requires_company_selection': False}
+        if company_id is not None:
+            companies = [(c, m) for c, m in companies if c.id == company_id]
+            if not companies:
+                raise HTTPException(403, 'Company membership is inactive or unauthorized')
+        if len(companies) > 1:
+            return {'ok': True, 'must_change_password': False, 'requires_company_selection': True,
+                    'selection_token': auth.issue(user, purpose='selection', ttl=300), 'expires_in': 300,
+                    'companies': [{'id': c.id, 'name': c.name, 'slug': c.slug, 'role': m.role} for c, m in companies]}
+        _, link = companies[0]
+        return {'ok': True, 'must_change_password': False, 'requires_company_selection': False,
+                'token': auth.issue(user, link, legacy=legacy), 'expires_in': 28800,
+                'username': auth.username if legacy else user.name, 'user_id': user.id,
+                'email': user.email, 'company_id': link.company_id, 'role': link.role,
+                'is_superadmin': bool(user.is_superadmin)}
+
+    def password_claims(authorization):
+        token = auth.bearer(authorization)
+        try:
+            return auth.decode(token, 'password_change')
+        except HTTPException:
+            return auth.decode(token, 'session')
+
+    @router.post('/auth/change-password')
+    def change_password(payload: ChangePassword, response: Response, authorization: str | None = Header(default=None)):
+        response.headers['Cache-Control'] = 'no-store'
+        claims = password_claims(authorization)
+        with auth.sessions() as db:
+            # Serialize credential changes, then revalidate the token under the lock.
+            db.scalar(select(User).where(User.id == claims['user_id']).with_for_update())
+            user = auth.validate_identity(db, claims, allow_password_change=True)
+            if claims['purpose'] == 'session':
+                link = auth.membership(db, user.id, claims['company_id'])
+                if link.role != claims['role']:
+                    raise HTTPException(403, 'Role changed; sign in again')
+            if not verify_password(user.password_hash, payload.current_password):
+                raise HTTPException(401, 'Senha atual incorreta.')
+            if payload.new_password != payload.confirm_password:
+                raise HTTPException(422, 'A confirmação deve coincidir com a nova senha.')
+            if payload.new_password == payload.current_password:
+                raise HTTPException(422, 'A nova senha deve ser diferente da senha atual.')
+            user.password_hash = hash_password(payload.new_password)
+            user.must_change_password = False
+            result = login_result(db, user, legacy=bool(claims.get('legacy')),
+                                  company_id=claims['company_id'])
+            commit(db)
+            return result
+
     @router.post('/auth/login')
     def login(payload: LoginPayload, response: Response):
         response.headers['Cache-Control'] = 'no-store'
@@ -193,22 +256,7 @@ def build_router(auth):
                 raise HTTPException(401, 'Invalid login credentials')
             if not user.active:
                 raise HTTPException(403, 'User is inactive')
-            companies = auth.permitted_companies(db, user.id)
-            if legacy:
-                companies = [(c, m) for c, m in companies if c.id == auth.default_company_id]
-            if not companies:
-                raise HTTPException(403, 'No active company is associated with this user')
-            if len(companies) > 1:
-                return {'ok': True, 'requires_company_selection': True,
-                        'selection_token': auth.issue(user, purpose='selection', ttl=300),
-                        'expires_in': 300,
-                        'companies': [{'id': c.id, 'name': c.name, 'slug': c.slug, 'role': m.role} for c, m in companies]}
-            _, link = companies[0]
-            return {'ok': True, 'requires_company_selection': False,
-                    'token': auth.issue(user, link, legacy=legacy), 'expires_in': 28800,
-                    'username': auth.username if legacy else user.name, 'user_id': user.id,
-                    'email': user.email, 'company_id': link.company_id, 'role': link.role,
-                    'is_superadmin': bool(user.is_superadmin)}
+            return login_result(db, user, legacy=legacy)
 
     @router.post('/auth/select-company')
     def select_company(payload: SelectCompany, response: Response, authorization: str | None = Header(default=None)):
@@ -226,16 +274,26 @@ def build_router(auth):
                 auth.membership(db, user.id, claims['company_id'])
             link = auth.membership(db, user.id, payload.company_id)
             response.headers['Cache-Control'] = 'no-store'
-            return {'ok': True, 'token': auth.issue(user, link, legacy=bool(claims.get('legacy'))),
+            return {'ok': True, 'must_change_password': False, 'token': auth.issue(user, link, legacy=bool(claims.get('legacy'))),
                     'expires_in': 28800, 'user_id': user.id, 'email': user.email,
                     'company_id': link.company_id, 'role': link.role, 'is_superadmin': bool(user.is_superadmin)}
 
     @router.get('/auth/me')
-    def me(context=Depends(auth.current)):
+    def me(request: Request, response: Response, authorization: str | None = Header(default=None)):
+        response.headers['Cache-Control'] = 'no-store'
+        token = auth.bearer(authorization)
+        if auth.old_session(token) is None:
+            claims = password_claims(authorization)
+            with auth.sessions() as db:
+                user = auth.validate_identity(db, claims, allow_password_change=True)
+                if user.must_change_password:
+                    return {'user_id': user.id, 'must_change_password': True}
+        context = auth.from_token(token)
+        auth.check_company_hint(request, context)
         with auth.sessions() as db:
             company = db.get(Company, context.company_id)
             company_name, logo_url = company.name, company.logo_url
-        return {'user_id': context.user_id, 'email': context.email, 'company_id': context.company_id,
+        return {'must_change_password': False, 'user_id': context.user_id, 'email': context.email, 'company_id': context.company_id,
                 'company_name': company_name, 'logo_url': logo_url,
                 'role': context.role, 'is_superadmin': context.is_superadmin}
 
@@ -287,7 +345,7 @@ def build_router(auth):
             if not payload.name.strip():
                 raise HTTPException(422, 'User name is required')
             user = User(name=payload.name.strip(), email=payload.email, password_hash=hash_password(payload.password),
-                        active=payload.active, is_superadmin=False)
+                        active=payload.active, is_superadmin=False, must_change_password=True)
             db.add(user)
             commit(db)
             return user_json(user)
@@ -316,6 +374,7 @@ def build_router(auth):
             if not user:
                 raise HTTPException(404, 'User not found')
             user.password_hash = hash_password(payload.password)
+            user.must_change_password = not is_demo_account(user)
             commit(db)
             return {'ok': True}
 

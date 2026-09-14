@@ -26,7 +26,7 @@ class RolesViewerBrowserTests(fixture.AdminLoginBrowserTests):
     def route(self, route):
         if not route.request.url.startswith(self.base + '/'):
             route.abort()
-        elif route.request.url.endswith('/config.js'):
+        elif route.request.url.split('?', 1)[0].endswith('/config.js'):
             folder = 'viewer' if '/ui-viewer/' in route.request.url else 'admin'
             source = (ROOT / folder / 'config.js').read_text(encoding='utf-8')
             source = re.sub(r"API_BASE_URL:\s*'[^']*'", f"API_BASE_URL: '{self.base}'", source)

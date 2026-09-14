@@ -268,7 +268,7 @@ class MultiempresaTests(unittest.TestCase):
         self.assertEqual(company.status_code,201)
         user=self.client.post('/users',headers=headers,json={'name':'Managed','email':'managed-'+self.prefix+'@example.invalid','password':self.password})
         self.assertEqual(user.status_code,201)
-        self.assertNotIn('password',user.text)
+        self.assertNotIn('password',user.json());self.assertNotIn('password_hash',user.json())
         self.assertNotIn(self.password,user.text)
         link=self.client.post(f'/users/{user.json()["id"]}/companies',headers=headers,json={'company_id':company.json()['id'],'role':'supervisor'})
         self.assertEqual(link.status_code,200)

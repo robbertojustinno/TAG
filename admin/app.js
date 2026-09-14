@@ -177,6 +177,7 @@ const state = {
   role: '',
   apiSuccessVersion: 0,
   showSuperadmin: false,
+  pendingPassword: sessionStorage.getItem(CONFIG.STORAGE_KEYS.authToken + '.password_change') || '',
   pendingSelection: null,
   items: [],
   units: [],
@@ -215,6 +216,7 @@ function setLanguage(lang) {
 }
 
 function syncHeaderLanguage() {
+  document.querySelector('.topbar-actions').classList.toggle('hidden', !!state.pendingPassword);
   document.getElementById('brandTitle').textContent = 'TAGCHECK';
   document.getElementById('brandSubtitle').textContent = state.authToken ? '' : t('brandSubtitle');
   document.getElementById('companyAdminButton').classList.toggle('hidden', !state.authToken || state.role !== 'company_admin' || state.isSuperadmin);
@@ -289,7 +291,7 @@ async function fetchWithTimeout(url, options = {}) {
       const badge = document.getElementById('apiStatusBadge');
       if (badge) badge.textContent = t('apiOk');
     }
-    if (response.status === 401 && options.headers?.Authorization) {
+    if (response.status === 401 && options.headers?.Authorization && !url.endsWith('/auth/change-password')) {
       logoutAdmin();
     }
     return response;
@@ -378,8 +380,14 @@ async function readIdentity(token = state.authToken) {
 }
 
 async function finishLogin(result) {
+  if (result.must_change_password) return requirePasswordChange(result.token);
+  if (result.requires_company_selection) {
+    state.pendingSelection = result;
+    return renderCompanySelection();
+  }
   if (!result.token) throw new Error(t('loginError'));
   const identity = await readIdentity(result.token);
+  if (identity.must_change_password) return requirePasswordChange(result.token);
   state.authToken = result.token;
   state.authUser = result.username || identity.email;
   state.companyName = identity.company_name;
@@ -392,6 +400,56 @@ async function finishLogin(result) {
   await loadUnits();
   await loadItems();
   if (state.authToken) renderApp();
+}
+
+function requirePasswordChange(token) {
+  logoutAdmin();
+  state.pendingPassword = token;
+  sessionStorage.setItem(CONFIG.STORAGE_KEYS.authToken + '.password_change', token);
+  renderPasswordChange();
+}
+
+function renderPasswordChange() {
+  syncHeaderLanguage();
+  app.innerHTML = `<section class="login-shell"><form id="changePasswordForm" class="card login-card">
+    <h2 class="login-title">Defina sua nova senha</h2>
+    <p class="login-subtitle">Use uma senha própria com pelo menos 12 caracteres.</p>
+    <div class="login-stack">
+      <label>Senha atual<input name="current_password" class="input" type="password" autocomplete="current-password" maxlength="1024" required></label>
+      <label>Nova senha<input name="new_password" class="input" type="password" autocomplete="new-password" minlength="12" maxlength="1024" required></label>
+      <label>Confirmar nova senha<input name="confirm_password" class="input" type="password" autocomplete="new-password" minlength="12" maxlength="1024" required></label>
+    </div>
+    <div class="inline-actions"><button class="primary-button">Alterar senha</button>
+      <button id="cancelPasswordChange" class="outline-button" type="button">Sair</button></div>
+    <div id="passwordFeedback" role="alert"></div>
+  </form></section>`;
+  document.getElementById('cancelPasswordChange').addEventListener('click', logoutAdmin);
+  document.getElementById('changePasswordForm').addEventListener('submit', async event => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const token = state.pendingPassword;
+    const controls = [...form.querySelectorAll('button')];
+    controls.forEach(button => button.disabled = true);
+    try {
+      const response = await fetchWithTimeout(buildUrl(CONFIG.API_BASE_URL, '/auth/change-password'), {
+        method: 'POST', headers: {'Content-Type': 'application/json', Authorization: `Bearer ${token}`},
+        body: JSON.stringify(Object.fromEntries(new FormData(form)))
+      });
+      const result = await response.json();
+      if (token !== state.pendingPassword) return;
+      if (!response.ok) throw new Error(typeof result.detail === 'string' ? result.detail : 'Verifique as senhas. A nova senha deve ter pelo menos 12 caracteres.');
+      state.pendingPassword = '';
+      sessionStorage.removeItem(CONFIG.STORAGE_KEYS.authToken + '.password_change');
+      syncHeaderLanguage();
+      await finishLogin(result);
+    } catch (error) {
+      if (token === state.pendingPassword) document.getElementById('passwordFeedback').textContent = error.message;
+      else renderCurrentView();
+    } finally {
+      form.reset();
+      controls.forEach(button => button.disabled = false);
+    }
+  });
 }
 
 function renderCompanySelection(notice = '') {
@@ -746,6 +804,7 @@ function renderLogin(notice = '') {
 }
 
 function renderApp(notice = '') {
+  if (state.pendingPassword) return renderPasswordChange();
   const total = state.items.length;
   const withPhoto = state.items.filter((x) => !!x.photo).length;
   const noPhoto = total - withPhoto;
@@ -1242,6 +1301,8 @@ window.askDeleteItem = function(id) {
 };
 
 function logoutAdmin() {
+  state.pendingPassword = '';
+  sessionStorage.removeItem(CONFIG.STORAGE_KEYS.authToken + '.password_change');
   state.showCompanyAdmin = false;
   state.logoUrl = null;
   clearCompanyLogo();
@@ -1265,6 +1326,7 @@ function logoutAdmin() {
 }
 
 function renderCurrentView(notice = '') {
+  if (state.pendingPassword) return renderPasswordChange();
   syncHeaderLanguage();
 
   if (!state.authToken) {
@@ -1318,9 +1380,15 @@ async function boot() {
   openViewerButton.href = CONFIG.VIEWER_BASE_URL;
 
   try {
+    if (state.pendingPassword) {
+      const identity = await readIdentity(state.pendingPassword);
+      if (identity.must_change_password) return renderPasswordChange();
+      return logoutAdmin();
+    }
     await pingApi();
     if (state.authToken) {
       const identity = await readIdentity();
+      if (identity.must_change_password) return requirePasswordChange(state.authToken);
       state.companyName = identity.company_name;
       state.isSuperadmin = identity.is_superadmin === true;
       syncHeaderLanguage();
@@ -1332,6 +1400,11 @@ async function boot() {
       renderLogin();
     }
   } catch (error) {
+    if (state.pendingPassword) {
+      renderPasswordChange();
+      document.getElementById('passwordFeedback').textContent = 'Não foi possível validar a sessão. Verifique sua conexão ou entre novamente.';
+      return;
+    }
     if (state.authToken) {
       renderApp(`<div class="notice error">${escapeHtml(error.message || t('listError'))}</div>`);
     } else {

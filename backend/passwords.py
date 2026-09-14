@@ -12,3 +12,12 @@ def verify_password(encoded, password):
         return hasher.verify(encoded, password)
     except (InvalidHashError, VerificationError):
         return False
+
+# Explicit homologation identities; resets keep their established Demo flow.
+DEMO_EMAILS = frozenset({
+    'demo@tagcheck.local', 'supervisor@tagcheck.local',
+    'operator@tagcheck.local', 'viewer@tagcheck.local',
+})
+
+def is_demo_account(user):
+    return user.email.strip().lower() in DEMO_EMAILS
