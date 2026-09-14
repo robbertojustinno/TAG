@@ -191,6 +191,21 @@ class SuperadminBrowserTests(unittest.TestCase):
             ['operator', 'Operador'], ['viewer', 'Somente leitura']])
         self.assertFalse(self.page.locator('body').evaluate('document.documentElement.scrollWidth > window.innerWidth'))
 
+    def test_superadmin_tables_are_responsive_without_horizontal_scroll(self):
+        self.open_panel()
+        for viewport in [(1280, 800), (390, 844)]:
+            self.page.set_viewport_size({'width': viewport[0], 'height': viewport[1]})
+            self.page.reload()
+            expect(self.page.locator('#superadminButton')).to_be_visible()
+            self.page.locator('#superadminButton').click()
+            expect(self.page.locator('#companyCreateForm')).to_be_visible()
+            self.assertFalse(self.page.evaluate('document.documentElement.scrollWidth > window.innerWidth'))
+            self.assertTrue(self.page.locator('#companyRows [data-edit-company]').count() >= 1)
+            self.assertTrue(self.page.locator('#companyRows [data-toggle-company]').count() >= 1)
+            self.assertTrue(self.page.locator('#userRows [data-edit-user]').count() >= 1)
+            self.assertTrue(self.page.locator('#userRows [data-reset-user]').count() >= 1)
+            self.assertTrue(self.page.locator('#userRows [data-toggle-user]').count() >= 1)
+
 
 del BrowserFixture  # Do not collect the imported login test class.
 

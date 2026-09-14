@@ -781,8 +781,30 @@ textarea {
 
 /* Super Admin tables stay readable without forcing the page to scroll sideways. */
 .superadmin-grid { min-width: 0; }
-#superadminPanel .table-wrap { overflow-x: auto; max-width: 100%; }
-#superadminPanel table { width: 100%; table-layout: fixed; }
+#superadminPanel .table-wrap { overflow: visible; max-width: 100%; }
+#superadminPanel table { width: 100%; min-width: 0; table-layout: fixed; }
 #superadminPanel th, #superadminPanel td { overflow-wrap: anywhere; vertical-align: middle; }
 #superadminPanel td .inline-actions { flex-wrap: wrap; }
 #superadminPanel form.inline-actions { flex-wrap: wrap; }
+#superadminPanel .inline-actions { gap: 6px; min-width: 0; }
+#superadminPanel .inline-actions > * { min-width: 0; max-width: 100%; }
+
+@media (max-width: 720px) {
+  #superadminPanel .table-wrap { border: 0; background: transparent; }
+  #superadminPanel table, #superadminPanel thead, #superadminPanel tbody,
+  #superadminPanel tr, #superadminPanel td { display: block; width: 100%; }
+  #superadminPanel thead { display: none; }
+  #superadminPanel tbody { display: grid; gap: 10px; }
+  #superadminPanel tbody tr { padding: 10px; border: 1px solid var(--line); border-radius: 14px; background: rgba(255,255,255,0.025); }
+  #superadminPanel tbody td { display: grid; grid-template-columns: minmax(76px, 30%) minmax(0, 1fr); gap: 8px; padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+  #superadminPanel tbody td:last-child { border-bottom: 0; }
+  #superadminPanel tbody td::before { color: var(--muted); font-size: .76rem; font-weight: 700; text-transform: uppercase; }
+  #superadminPanel tbody td:nth-child(1)::before { content: 'Nome'; }
+  #superadminPanel tbody td:nth-child(2)::before { content: 'Identificador / E-mail'; }
+  #superadminPanel tbody td:nth-child(3)::before { content: 'Status'; }
+  #superadminPanel tbody td:nth-child(4)::before { content: 'Ações'; }
+  #superadminPanel tbody td[colspan] { display: block; }
+  #superadminPanel tbody td[colspan]::before { content: none; }
+  #superadminPanel tbody td .inline-actions { justify-content: flex-start; }
+  #superadminPanel tbody td .inline-actions button { flex: 1 1 110px; }
+}
