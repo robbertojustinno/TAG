@@ -60,13 +60,15 @@ def legacy_company_default(context):
 
 class Equipment(Base):
     __tablename__ = 'tagcheck_equipment'
+    __table_args__ = (
+        UniqueConstraint('company_id', 'tag', name='uq_equipment_company_tag'),
+    )
     id = Column(Integer, primary_key=True, index=True)
     company_id = Column(Integer, ForeignKey('companies.id', ondelete='RESTRICT'), nullable=False,
                         index=True, default=legacy_company_default)
     unit_id = Column(Integer, ForeignKey('units.id', ondelete='RESTRICT'), nullable=True, index=True)
     unit = relationship('Unit')
-    # Preserve the existing global uniqueness rule; no destructive index migration.
-    tag = Column(String, unique=True, index=True, nullable=False)
+    tag = Column(String, index=True, nullable=False)
     name = Column(String, nullable=False)
     photo = Column(String, nullable=False)
     equipment_type = Column(String, nullable=True)

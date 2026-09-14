@@ -51,6 +51,37 @@ class MultiempresaTests(unittest.TestCase):
         self.assertEqual(r.status_code,200)
         return {'Authorization':'Bearer '+r.json()['token']}
 
+    def test_shared_tag_creation_updates_and_isolation(self):
+        shared_tag = self.prefix + '-shared'
+        created = {}
+        with patch.object(b.cloudinary.uploader, 'upload', return_value={'secure_url': 'https://example.invalid/test.png'}):
+            for company in ('a', 'b'):
+                headers = self.headers(company)
+                response = self.client.post('/equipment', headers=headers,
+                    data={'tag': shared_tag, 'name': company},
+                    files={'photo': ('t.png', b'test', 'image/png')})
+                self.assertEqual(response.status_code, 200, response.text)
+                created[company] = response.json()['id']
+                duplicate = self.client.post('/equipment', headers=headers,
+                    data={'tag': shared_tag, 'name': 'duplicate'},
+                    files={'photo': ('t.png', b'test', 'image/png')})
+                self.assertEqual(duplicate.status_code, 400)
+        for own, other in [('a', 'b'), ('b', 'a')]:
+            headers = self.headers(own)
+            fetched = self.client.get('/equipment/tag/' + shared_tag, headers=headers)
+            self.assertEqual(fetched.json()['id'], created[own])
+            rows = self.client.get('/equipment', headers=headers).json()
+            self.assertIn(created[own], {row['id'] for row in rows})
+            self.assertNotIn(created[other], {row['id'] for row in rows})
+            self.assertEqual(self.client.put(f'/equipment/{created[other]}', headers=headers,
+                data={'tag': shared_tag, 'name': 'forbidden'}).status_code, 404)
+            self.assertEqual(self.client.put(f'/equipment/{self.items[own][0]}', headers=headers,
+                data={'tag': shared_tag, 'name': 'duplicate'}).status_code, 400)
+            # Updating to a TAG used only by the other company remains allowed.
+            response = self.client.put(f'/equipment/{created[own]}', headers=headers,
+                data={'tag': self.items[other][1], 'name': own})
+            self.assertEqual(response.status_code, 200, response.text)
+
     def test_bidirectional_isolation_all_reads(self):
         for own,other in [('a','b'),('b','a')]:
             headers=self.headers(own)

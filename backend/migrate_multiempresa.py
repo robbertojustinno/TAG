@@ -1,4 +1,4 @@
-"""Additive, idempotent migration. No tables, rows or legacy IDs are removed."""
+"""Idempotent migration. No tables, rows or legacy IDs are removed."""
 import os
 from sqlalchemy import create_engine, event, inspect, select, text
 from sqlalchemy.orm import Session
@@ -16,6 +16,41 @@ def make_engine(url):
         def sqlite_foreign_keys(connection, _):
             connection.execute('PRAGMA foreign_keys=ON')
     return engine
+
+def migrate_tag_uniqueness(connection):
+    table = 'tagcheck_equipment'
+    constraint_name = 'uq_equipment_company_tag'
+    quote = connection.dialect.identifier_preparer.quote
+    constraints = inspect(connection).get_unique_constraints(table)
+    named = next((c for c in constraints if c['name'] == constraint_name), None)
+    if named and named['column_names'] != ['company_id', 'tag']:
+        raise RuntimeError('Migration stopped: unexpected equipment TAG constraint')
+    if connection.dialect.name == 'postgresql':
+        # Establish the replacement before removing global protection. DDL and
+        # data share the migration transaction, including failure rollback.
+        if named is None:
+            connection.execute(text(f'ALTER TABLE {table} ADD CONSTRAINT {constraint_name} UNIQUE (company_id, tag)'))
+        for constraint in constraints:
+            if constraint['column_names'] == ['tag']:
+                connection.execute(text(f'ALTER TABLE {table} DROP CONSTRAINT {quote(constraint["name"])}'))
+    elif named is None:
+        indexes = inspect(connection).get_indexes(table)
+        existing = next((i for i in indexes if i['name'] == constraint_name), None)
+        if existing and (not existing['unique'] or existing['column_names'] != ['company_id', 'tag']
+                         or existing.get('dialect_options', {}).get('sqlite_where') is not None):
+            raise RuntimeError('Migration stopped: unexpected equipment TAG index')
+        if existing is None:
+            connection.execute(text(f'CREATE UNIQUE INDEX {constraint_name} ON {table}(company_id, tag)'))
+        # SQLite inline UNIQUE autoindexes cannot be dropped without rebuilding
+        # the table. Preserve those legacy tables; the old ORM's standalone
+        # unique TAG index can be replaced without dropping tables or rows.
+
+    # Reflect again: PostgreSQL removes a constraint's backing index with it.
+    for index in inspect(connection).get_indexes(table):
+        if index['unique'] and index['column_names'] == ['tag'] and not index.get('duplicates_constraint'):
+            connection.execute(text(f'DROP INDEX {quote(index["name"])}'))
+    connection.execute(text(f'CREATE INDEX IF NOT EXISTS ix_tagcheck_equipment_tag ON {table}(tag)'))
+
 
 def migrate(engine, username, password, email):
     if engine.dialect.name not in ('sqlite', 'postgresql'):
@@ -68,6 +103,7 @@ def migrate(engine, username, password, email):
         orphaned = connection.execute(text('SELECT COUNT(*) FROM tagcheck_equipment e LEFT JOIN companies c ON e.company_id=c.id WHERE c.id IS NULL')).scalar_one()
         if orphaned:
             raise RuntimeError('Migration stopped: invalid existing company association')
+        migrate_tag_uniqueness(connection)
         connection.execute(text('CREATE INDEX IF NOT EXISTS ix_tagcheck_equipment_company_id ON tagcheck_equipment(company_id)'))
         connection.execute(text('CREATE INDEX IF NOT EXISTS ix_tagcheck_equipment_unit_id ON tagcheck_equipment(unit_id)'))
         if engine.dialect.name == 'postgresql':
