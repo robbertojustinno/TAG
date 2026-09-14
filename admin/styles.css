@@ -778,3 +778,11 @@ textarea {
 .card.panel {
   padding-bottom: 12px !important;
 }
+
+/* Super Admin tables stay readable without forcing the page to scroll sideways. */
+.superadmin-grid { min-width: 0; }
+#superadminPanel .table-wrap { overflow-x: auto; max-width: 100%; }
+#superadminPanel table { width: 100%; table-layout: fixed; }
+#superadminPanel th, #superadminPanel td { overflow-wrap: anywhere; vertical-align: middle; }
+#superadminPanel td .inline-actions { flex-wrap: wrap; }
+#superadminPanel form.inline-actions { flex-wrap: wrap; }

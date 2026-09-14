@@ -32,6 +32,19 @@ class NewCompany(Input):
 class CompanyState(Input):
     active: bool
 
+class CompanyUpdate(Input):
+    name: str | None = Field(default=None, max_length=200)
+    slug: str | None = Field(default=None, pattern=r'^[a-z0-9]+(?:-[a-z0-9]+)*$', max_length=100)
+    active: bool | None = None
+
+    @field_validator('name')
+    @classmethod
+    def normalize_company_name(cls, value):
+        value = value.strip()
+        if not value:
+            raise ValueError('Company name is required')
+        return value
+
 class NewUser(Input):
     name: str = Field(min_length=1, max_length=200)
     email: str = Field(max_length=254)
@@ -48,7 +61,28 @@ class NewUser(Input):
         return value
 
 class UserState(Input):
-    active: bool
+    name: str | None = Field(default=None, max_length=200)
+    email: str | None = Field(default=None, max_length=254)
+    active: bool | None = None
+
+    @field_validator('name')
+    @classmethod
+    def normalize_user_name(cls, value):
+        value = value.strip()
+        if not value:
+            raise ValueError('User name is required')
+        return value
+
+    @field_validator('email')
+    @classmethod
+    def normalize_user_email(cls, value):
+        value = value.strip().lower()
+        if not re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+', value):
+            raise ValueError('Invalid email')
+        return value
+
+class ResetPassword(Input):
+    password: str = Field(min_length=12, max_length=1024)
 
 class Membership(Input):
     company_id: int = Field(gt=0, strict=True)
@@ -188,14 +222,19 @@ def build_router(auth):
             return company_json(item)
 
     @router.patch('/companies/{company_id}')
-    def company_state(company_id: int, payload: CompanyState, _=Depends(auth.superadmin)):
-        if not payload.active and company_id == _.company_id:
+    def company_state(company_id: int, payload: CompanyUpdate, _=Depends(auth.superadmin)):
+        if payload.active is False and company_id == _.company_id:
             raise HTTPException(409, 'Select another active company before disabling the current one')
         with auth.sessions() as db:
             item = db.get(Company, company_id)
             if not item:
                 raise HTTPException(404, 'Company not found')
-            item.active = payload.active
+            if payload.name is not None:
+                item.name = payload.name
+            if payload.slug is not None:
+                item.slug = payload.slug
+            if payload.active is not None:
+                item.active = payload.active
             commit(db)
             return company_json(item)
 
@@ -217,15 +256,30 @@ def build_router(auth):
 
     @router.patch('/users/{user_id}')
     def user_state(user_id: int, payload: UserState, _=Depends(auth.superadmin)):
-        if not payload.active and user_id == _.user_id:
+        if payload.active is False and user_id == _.user_id:
             raise HTTPException(409, 'Cannot disable your own administration account')
         with auth.sessions() as db:
             user = db.get(User, user_id)
             if not user:
                 raise HTTPException(404, 'User not found')
-            user.active = payload.active
+            if payload.name is not None:
+                user.name = payload.name
+            if payload.email is not None:
+                user.email = payload.email
+            if payload.active is not None:
+                user.active = payload.active
             commit(db)
             return user_json(user)
+
+    @router.post('/users/{user_id}/reset-password')
+    def reset_password(user_id: int, payload: ResetPassword, _=Depends(auth.superadmin)):
+        with auth.sessions() as db:
+            user = db.get(User, user_id)
+            if not user:
+                raise HTTPException(404, 'User not found')
+            user.password_hash = hash_password(payload.password)
+            commit(db)
+            return {'ok': True}
 
     @router.get('/users/{user_id}/companies')
     def memberships(user_id: int, _=Depends(auth.superadmin)):

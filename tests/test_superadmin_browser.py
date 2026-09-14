@@ -152,6 +152,45 @@ class SuperadminBrowserTests(unittest.TestCase):
         with b.SessionLocal() as db:
             self.assertIsNone(db.scalar(select(b.UserCompany).where(b.UserCompany.user_id == user_id, b.UserCompany.company_id == self.z)))
 
+    def test_edit_company_and_user(self):
+        self.open_panel()
+        company = self.create_company()
+        row = self.page.locator(f'[data-company-id="{company["id"]}"]')
+        row.get_by_role('button', name='Editar', exact=True).click()
+        form = row.locator('[data-company-edit]')
+        form.locator('[name=name]').fill('Empresa Editada')
+        form.locator('[name=slug]').fill('empresa-editada')
+        with self.page.expect_response(lambda r: r.url.endswith('/companies/' + str(company['id'])) and r.request.method == 'PATCH') as response:
+            form.get_by_role('button', name='Salvar', exact=True).click()
+        self.assertEqual(response.value.status, 200)
+        expect(self.page.locator(f'[data-company-id="{company["id"]}"]')).to_contain_text('Empresa Editada')
+        user = self.create_user()
+        user_row = self.page.locator(f'[data-user-id="{user["id"]}"]')
+        user_row.get_by_role('button', name='Editar', exact=True).click()
+        user_form = user_row.locator('[data-user-edit]')
+        user_form.locator('[name=name]').fill('Usuário Editado')
+        user_form.locator('[name=email]').fill('edited@example.invalid')
+        with self.page.expect_response(lambda r: r.url.endswith('/users/' + str(user['id'])) and r.request.method == 'PATCH') as response:
+            user_form.get_by_role('button', name='Salvar', exact=True).click()
+        self.assertEqual(response.value.status, 200)
+        expect(self.page.locator(f'[data-user-id="{user["id"]}"]')).to_contain_text('edited@example.invalid')
+
+    def test_reset_password_and_role_labels(self):
+        self.open_panel()
+        user = self.create_user()
+        row = self.page.locator(f'[data-user-id="{user["id"]}"]')
+        dialogs = iter(['new-password-123', 'new-password-123'])
+        self.page.on('dialog', lambda dialog: (dialog.accept(next(dialogs))))
+        with self.page.expect_response(lambda r: r.url.endswith('/users/' + str(user['id']) + '/reset-password')) as response:
+            row.get_by_role('button', name='Redefinir senha', exact=True).click()
+        self.assertEqual(response.value.status, 200)
+        expect(self.page.locator('#superadminFeedback')).to_contain_text('Senha redefinida com sucesso')
+        options = self.page.locator('#memberRole option')
+        self.assertEqual(options.evaluate_all('(items) => items.map(item => [item.value, item.textContent])'), [
+            ['company_admin', 'Administrador da empresa'], ['supervisor', 'Supervisor'],
+            ['operator', 'Operador'], ['viewer', 'Somente leitura']])
+        self.assertFalse(self.page.locator('body').evaluate('document.documentElement.scrollWidth > window.innerWidth'))
+
 
 del BrowserFixture  # Do not collect the imported login test class.
 
