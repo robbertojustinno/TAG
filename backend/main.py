@@ -200,6 +200,11 @@ def root():
     return {"ok": True, "message": "TagCheck backend online"}
 
 
+@app.head("/")
+def root_head():
+    return Response(status_code=200)
+
+
 @app.get("/health")
 def health():
     return {"ok": True}
