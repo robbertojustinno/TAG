@@ -228,7 +228,8 @@ async def create_equipment(
     notes: str = Form(""),
     _auth: CompanyContext = Depends(auth.writer),
 ):
-    if not tag.strip():
+    tag = tag.strip().upper()
+    if not tag:
         raise HTTPException(status_code=400, detail="TAG Ã© obrigatÃ³ria.")
     if not name.strip():
         raise HTTPException(status_code=400, detail="Nome Ã© obrigatÃ³rio.")
@@ -238,7 +239,7 @@ async def create_equipment(
     db = SessionLocal()
     try:
         validate_equipment_unit(db, unit_id, _auth.company_id)
-        existing = equipment_query(db, _auth).filter(Equipment.tag == tag.strip()).first()
+        existing = equipment_query(db, _auth).filter(Equipment.tag == tag).first()
         if existing:
             raise HTTPException(status_code=400, detail="TAG jÃ¡ cadastrada.")
 
@@ -254,7 +255,7 @@ async def create_equipment(
         item = Equipment(
             company_id=_auth.company_id,
             unit_id=unit_id,
-            tag=tag.strip(),
+            tag=tag,
             name=name.strip(),
             photo=image_url,
             equipment_type=equipment_type.strip(),
@@ -309,7 +310,7 @@ def list_equipment(unit_id: int | None = Query(None, gt=0), _auth: CompanyContex
 def get_by_tag(tag: str, _auth: CompanyContext = Depends(auth.read_context)):
     db = SessionLocal()
     try:
-        clean_tag = tag.strip()
+        clean_tag = tag.strip().upper()
         item = equipment_query(db, _auth).filter(Equipment.tag == clean_tag).first()
         if not item:
             raise HTTPException(status_code=404, detail="Equipamento nÃ£o encontrado.")
@@ -370,14 +371,15 @@ async def update_equipment(
             validate_equipment_unit(db, unit_id, item.company_id)
             item.unit_id = unit_id
 
+        tag = tag.strip().upper()
         duplicated = equipment_query(db, _auth).filter(
-            Equipment.tag == tag.strip(),
+            Equipment.tag == tag,
             Equipment.id != id
         ).first()
         if duplicated:
             raise HTTPException(status_code=400, detail="TAG jÃ¡ cadastrada em outro equipamento.")
 
-        item.tag = tag.strip()
+        item.tag = tag
         item.name = name.strip()
         item.equipment_type = equipment_type.strip()
         item.sector = sector.strip()

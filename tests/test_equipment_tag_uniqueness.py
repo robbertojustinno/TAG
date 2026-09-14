@@ -85,12 +85,60 @@ class TagUniquenessCases:
         with self.engine.begin() as c:
             c.execute(text('DROP INDEX "Legacy TAG unique"'))
             c.execute(text("INSERT INTO tagcheck_equipment(tag,name,photo) VALUES('LEGACY','Duplicate','second.png')"))
-        with self.assertRaises(IntegrityError):
+        with self.assertRaisesRegex(RuntimeError, 'normalized TAG collision within company'):
             self.migrate()
         self.assertEqual(inspect(self.engine).get_table_names(), ['tagcheck_equipment'])
         with self.engine.connect() as c:
             self.assertEqual(c.scalar(text('SELECT COUNT(*) FROM tagcheck_equipment')), 2)
         self.assertNotIn('company_id', {c['name'] for c in inspect(self.engine).get_columns('tagcheck_equipment')})
+
+    def test_normalize_existing_tags_preserves_ids_and_tenants(self):
+        self.migrate()
+        with Session(self.engine) as db:
+            companies = [Company(name=name, slug='normalize-'+name) for name in ('a', 'b')]
+            db.add_all(companies); db.flush()
+            items = [Equipment(company_id=company.id, tag=tag, name='Original', photo='original.png', notes='Keep')
+                     for company, tag in zip(companies, (' demo-001 ', 'Demo-001'))]
+            items.append(Equipment(company_id=companies[0].id, tag=' straße-é ', name='Unicode', photo='unicode.png'))
+            db.add_all(items); db.commit()
+        with self.engine.connect() as c:
+            before = [dict(row) for row in c.execute(text('SELECT * FROM tagcheck_equipment ORDER BY id')).mappings()]
+        self.migrate()
+        self.migrate()
+        with self.engine.connect() as c:
+            after = [dict(row) for row in c.execute(text('SELECT * FROM tagcheck_equipment ORDER BY id')).mappings()]
+        expected = [{**row, 'tag': row['tag'].strip().upper()} for row in before]
+        self.assertEqual(after, expected)
+        self.assertEqual([row['tag'] for row in after], ['DEMO-001', 'DEMO-001', 'STRASSE-É'])
+
+    def test_legacy_case_collision_rolls_back_schema_and_all_rows(self):
+        self.legacy_table()
+        with self.engine.begin() as c:
+            c.execute(text("INSERT INTO tagcheck_equipment(tag,name,photo) VALUES(' legacy ','Duplicate','second.png')"))
+            c.execute(text("INSERT INTO tagcheck_equipment(tag,name,photo) VALUES('other','Other','third.png')"))
+        with self.engine.connect() as c:
+            before = c.execute(text('SELECT * FROM tagcheck_equipment ORDER BY id')).all()
+        for _ in range(2):
+            with self.assertRaisesRegex(RuntimeError, 'normalized TAG collision within company'):
+                self.migrate()
+            self.assertEqual(inspect(self.engine).get_table_names(), ['tagcheck_equipment'])
+            with self.engine.connect() as c:
+                self.assertEqual(c.execute(text('SELECT * FROM tagcheck_equipment ORDER BY id')).all(), before)
+
+    def test_unicode_collision_leaves_existing_schema_and_tags_unchanged(self):
+        result = self.migrate()
+        with Session(self.engine) as db:
+            db.add_all([Equipment(company_id=result['default_company_id'], tag=tag, name='Keep', photo='keep.png')
+                        for tag in ('straße', 'STRASSE', 'unrelated')])
+            db.commit()
+        with self.engine.connect() as c:
+            before = c.execute(text('SELECT * FROM tagcheck_equipment ORDER BY id')).all()
+        indexes = inspect(self.engine).get_indexes('tagcheck_equipment')
+        with self.assertRaisesRegex(RuntimeError, 'normalized TAG collision within company'):
+            self.migrate()
+        with self.engine.connect() as c:
+            self.assertEqual(c.execute(text('SELECT * FROM tagcheck_equipment ORDER BY id')).all(), before)
+        self.assertEqual(inspect(self.engine).get_indexes('tagcheck_equipment'), indexes)
 
 
 class SQLiteTagUniquenessTests(TagUniquenessCases, unittest.TestCase):

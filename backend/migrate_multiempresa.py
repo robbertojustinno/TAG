@@ -52,6 +52,22 @@ def migrate_tag_uniqueness(connection):
     connection.execute(text(f'CREATE INDEX IF NOT EXISTS ix_tagcheck_equipment_tag ON {table}(tag)'))
 
 
+def normalized_tag_updates(connection):
+    # Match Python API normalization, including Unicode; SQLite's SQL upper()
+    # only handles ASCII. Check every tenant before changing any equipment TAG.
+    seen = set()
+    updates = []
+    for row in connection.execute(text('SELECT id, company_id, tag FROM tagcheck_equipment')).mappings():
+        normalized = row['tag'].strip().upper()
+        key = (row['company_id'], normalized)
+        if key in seen:
+            raise RuntimeError('Migration stopped: normalized TAG collision within company')
+        seen.add(key)
+        if normalized != row['tag']:
+            updates.append({'equipment_id': row['id'], 'normalized_tag': normalized})
+    return updates
+
+
 def migrate(engine, username, password, email):
     if engine.dialect.name not in ('sqlite', 'postgresql'):
         raise RuntimeError('Migration supports PostgreSQL and SQLite only')
@@ -62,6 +78,9 @@ def migrate(engine, username, password, email):
         else:
             connection.execute(text('SELECT pg_advisory_xact_lock(2026091002)'))
         existing = inspect(connection).has_table('tagcheck_equipment')
+        if existing and engine.dialect.name == 'postgresql':
+            # Block concurrent equipment writes while checking and normalizing.
+            connection.execute(text('LOCK TABLE tagcheck_equipment IN SHARE ROW EXCLUSIVE MODE'))
         before = connection.execute(text('SELECT COUNT(*) FROM tagcheck_equipment')).scalar_one() if existing else 0
         Base.metadata.create_all(connection, tables=[Company.__table__, Unit.__table__, User.__table__, UserCompany.__table__])
         with Session(bind=connection) as db:
@@ -103,7 +122,10 @@ def migrate(engine, username, password, email):
         orphaned = connection.execute(text('SELECT COUNT(*) FROM tagcheck_equipment e LEFT JOIN companies c ON e.company_id=c.id WHERE c.id IS NULL')).scalar_one()
         if orphaned:
             raise RuntimeError('Migration stopped: invalid existing company association')
+        tag_updates = normalized_tag_updates(connection)
         migrate_tag_uniqueness(connection)
+        if tag_updates:
+            connection.execute(text('UPDATE tagcheck_equipment SET tag=:normalized_tag WHERE id=:equipment_id'), tag_updates)
         connection.execute(text('CREATE INDEX IF NOT EXISTS ix_tagcheck_equipment_company_id ON tagcheck_equipment(company_id)'))
         connection.execute(text('CREATE INDEX IF NOT EXISTS ix_tagcheck_equipment_unit_id ON tagcheck_equipment(unit_id)'))
         if engine.dialect.name == 'postgresql':

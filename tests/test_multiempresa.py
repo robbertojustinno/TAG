@@ -35,7 +35,7 @@ class MultiempresaTests(unittest.TestCase):
                 db.add(b.UserCompany(user_id=self.users[name][0], company_id=company, role=role))
             self.items={}
             for name,company in [('a',a.id),('b',z.id),('default',b.DEFAULT_COMPANY_ID)]:
-                item=b.Equipment(company_id=company,tag=f'{self.prefix}-{name}',name=name,photo='https://example.invalid/photo.png')
+                item=b.Equipment(company_id=company,tag=f'{self.prefix}-{name}'.upper(),name=name,photo='https://example.invalid/photo.png')
                 db.add(item); db.flush(); self.items[name]=(item.id,item.tag)
             db.commit()
 
@@ -50,6 +50,47 @@ class MultiempresaTests(unittest.TestCase):
         r=self.client.post('/auth/login',json={'username':fixture.ENV['ADMIN_USERNAME'],'password':fixture.ENV['ADMIN_PASSWORD']})
         self.assertEqual(r.status_code,200)
         return {'Authorization':'Bearer '+r.json()['token']}
+
+    def create_tag(self, tag, company='a'):
+        with patch.object(b.cloudinary.uploader, 'upload', return_value={'secure_url': 'https://example.invalid/test.png'}):
+            return self.client.post('/equipment', headers=self.headers(company),
+                data={'tag': tag, 'name': company}, files={'photo': ('t.png', b'test', 'image/png')})
+
+    def test_tag_lookup_ignores_case(self):
+        result = self.create_tag('DEMO-001')
+        self.assertEqual(result.status_code, 200)
+        for tag in ('demo-001', 'Demo-001', ' DEMO-001 '):
+            found = self.client.get('/equipment/tag/' + tag, headers=self.headers('a'))
+            self.assertEqual(found.status_code, 200)
+            self.assertEqual(found.json()['id'], result.json()['id'])
+
+    def test_tag_normalized_duplicates_and_tenant_isolation(self):
+        first = self.create_tag(' demo-001 ')
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(first.json()['tag'], 'DEMO-001')
+        self.assertEqual(self.create_tag('DEMO-001').status_code, 400)
+        other = self.create_tag('Demo-001', 'b')
+        self.assertEqual(other.status_code, 200)
+        self.assertNotEqual(first.json()['id'], other.json()['id'])
+        for company, expected in [('a', first), ('b', other)]:
+            found = self.client.get('/equipment/tag/demo-001', headers=self.headers(company))
+            self.assertEqual(found.json()['id'], expected.json()['id'])
+
+    def test_tag_update_normalizes_and_rejects_duplicates(self):
+        first = self.create_tag('DEMO-001').json()
+        second = self.create_tag('DEMO-002').json()
+        headers = self.headers('a')
+        response = self.client.put(f'/equipment/{second["id"]}', headers=headers,
+            data={'tag': ' demo-001 ', 'name': 'Duplicate'})
+        self.assertEqual(response.status_code, 400)
+        response = self.client.put(f'/equipment/{first["id"]}', headers=headers,
+            data={'tag': ' demo-003 ', 'name': 'Updated'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['tag'], 'DEMO-003')
+        found = self.client.get('/equipment/tag/Demo-003', headers=headers)
+        self.assertEqual(found.json()['id'], first['id'])
+        with b.SessionLocal() as db:
+            self.assertEqual(db.get(b.Equipment, second['id']).tag, 'DEMO-002')
 
     def test_shared_tag_creation_updates_and_isolation(self):
         shared_tag = self.prefix + '-shared'

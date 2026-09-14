@@ -59,7 +59,7 @@ class EquipmentUnitTests(unittest.TestCase):
         self.assertEqual(response.json()['unit_name'], 'first')
         fetched = self.client.get('/equipment/tag/' + self.prefix, headers=self.headers)
         self.assertEqual(fetched.json()['unit_name'], 'first')
-        listed = next(item for item in self.client.get('/equipment', headers=self.headers).json() if item['tag'] == self.prefix)
+        listed = next(item for item in self.client.get('/equipment', headers=self.headers).json() if item['tag'] == self.prefix.upper())
         self.assertEqual(listed['unit_id'], self.units[0])
 
     def test_block_foreign_unit(self):
