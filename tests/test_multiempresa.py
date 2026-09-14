@@ -158,6 +158,27 @@ class MultiempresaTests(unittest.TestCase):
             link.active=False; db.commit()
         self.assertEqual(self.client.get('/equipment',headers=headers).status_code,403)
 
+    def test_role_crud_matrix(self):
+        for role in ('company_admin', 'supervisor', 'operator', 'viewer'):
+            with self.subTest(role=role):
+                with b.SessionLocal() as db:
+                    link = db.scalar(select(b.UserCompany).where(b.UserCompany.user_id == self.users['a'][0]))
+                    link.role = role
+                    db.commit()
+                headers = self.headers('a')
+                self.assertEqual(self.client.get('/equipment', headers=headers).status_code, 200)
+                with patch.object(b.cloudinary.uploader, 'upload', return_value={'secure_url': 'https://example.invalid/test.png'}):
+                    created = self.client.post('/equipment', headers=headers,
+                        data={'tag': self.prefix + '-' + role, 'name': role},
+                        files={'photo': ('test.png', b'test', 'image/png')})
+                self.assertEqual(created.status_code, 403 if role == 'viewer' else 200)
+                item_id = self.items['a'][0] if role == 'viewer' else created.json()['id']
+                updated = self.client.put(f'/equipment/{item_id}', headers=headers,
+                    data={'tag': self.prefix + '-updated-' + role, 'name': 'Updated'})
+                self.assertEqual(updated.status_code, 403 if role == 'viewer' else 200)
+                deleted = self.client.delete(f'/equipment/{item_id}', headers=headers)
+                self.assertEqual(deleted.status_code, 403 if role in ('operator', 'viewer') else 200)
+
     def test_roles_restrict_operations(self):
         headers=self.headers('viewer')
         self.assertEqual(self.client.put(f'/equipment/{self.items["a"][0]}',headers=headers,data={'tag':self.items['a'][1],'name':'forbidden'}).status_code,403)

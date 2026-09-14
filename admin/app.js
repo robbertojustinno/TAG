@@ -174,6 +174,8 @@ const state = {
   authUser: sessionStorage.getItem(CONFIG.STORAGE_KEYS.authUser) || '',
   companyName: '',
   isSuperadmin: false,
+  role: '',
+  apiSuccessVersion: 0,
   showSuperadmin: false,
   pendingSelection: null,
   items: [],
@@ -279,6 +281,12 @@ async function fetchWithTimeout(url, options = {}) {
   const timer = setTimeout(() => controller.abort(), CONFIG.REQUEST_TIMEOUT_MS);
   try {
     const response = await fetch(url, { ...options, signal: controller.signal, cache: 'no-store' });
+    if (response.ok) {
+      state.apiReachable = true;
+      state.apiSuccessVersion += 1;
+      const badge = document.getElementById('apiStatusBadge');
+      if (badge) badge.textContent = t('apiOk');
+    }
     if (response.status === 401 && options.headers?.Authorization) {
       logoutAdmin();
     }
@@ -289,14 +297,30 @@ async function fetchWithTimeout(url, options = {}) {
 }
 
 async function pingApi() {
-  try {
-    const response = await fetchWithTimeout(buildUrl(CONFIG.API_BASE_URL, CONFIG.ENDPOINTS.health));
-    state.apiReachable = response.ok;
-    return response.ok;
-  } catch {
-    state.apiReachable = false;
-    return false;
+  const successVersion = state.apiSuccessVersion;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const response = await fetchWithTimeout(buildUrl(CONFIG.API_BASE_URL, CONFIG.ENDPOINTS.health));
+      if (response.ok) return true;
+    } catch {
+      // Render may still be starting; retry briefly.
+    }
+    if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 400));
   }
+  if (state.apiSuccessVersion === successVersion) state.apiReachable = false;
+  return state.apiReachable === true;
+}
+
+function canWriteEquipment() {
+  return state.isSuperadmin || ['company_admin', 'supervisor', 'operator'].includes(state.role);
+}
+
+function canDeleteEquipment() {
+  return state.isSuperadmin || ['company_admin', 'supervisor'].includes(state.role);
+}
+
+function canManageUnits() {
+  return state.isSuperadmin || state.role === 'company_admin';
 }
 
 function normalizeItem(raw) {
@@ -345,7 +369,9 @@ async function readIdentity(token = state.authToken) {
     logoutAdmin();
     throw new Error(t('loginError'));
   }
-  return response.json();
+  const identity = await response.json();
+  state.role = identity.role || '';
+  return identity;
 }
 
 async function finishLogin(result) {
@@ -640,7 +666,7 @@ function renderRows(items) {
   }
 
   return items.map((item) => {
-    if (state.editingId === item.id) {
+    if (canWriteEquipment() && state.editingId === item.id) {
       return renderEditableRow(item);
     }
 
@@ -659,8 +685,8 @@ function renderRows(items) {
         <td>${qrHtml(item.tag)}</td>
         <td>
           <div class="inline-actions">
-            <button class="secondary-button" onclick="startEditItem(${item.id})">${t('edit')}</button>
-            <button class="danger-button" onclick="askDeleteItem(${item.id})">${t('delete')}</button>
+            ${canWriteEquipment() ? `<button class="secondary-button" onclick="startEditItem(${item.id})">${t('edit')}</button>` : ''}
+            ${canDeleteEquipment() ? `<button class="danger-button" onclick="askDeleteItem(${item.id})">${t('delete')}</button>` : ''}
           </div>
         </td>
       </tr>
@@ -669,7 +695,7 @@ function renderRows(items) {
 }
 
 function renderDeleteConfirm() {
-  if (!state.deleteTargetId) return '';
+  if (!canDeleteEquipment() || !state.deleteTargetId) return '';
 
   const item = getItemById(state.deleteTargetId);
   if (!item) return '';
@@ -720,8 +746,8 @@ function renderApp(notice = '') {
   const withPhoto = state.items.filter((x) => !!x.photo).length;
   const noPhoto = total - withPhoto;
   const apiBadge = state.apiReachable
-    ? `<span class="badge">${t('apiOk')}</span>`
-    : `<span class="badge">${t('apiFail')}</span>`;
+    ? `<span id="apiStatusBadge" class="badge">${t('apiOk')}</span>`
+    : `<span id="apiStatusBadge" class="badge">${t('apiFail')}</span>`;
 
   app.innerHTML = `
     <section class="screen">
@@ -754,7 +780,7 @@ function renderApp(notice = '') {
       </div>
 
       <div class="grid-2">
-        <div class="card panel">
+        ${canWriteEquipment() ? `<div class="card panel">
           <h3>${t('formTitle')}</h3>
           <input id="tagInput" class="input" placeholder="${t('tag')}" value="${escapeHtml(state.createForm.tag)}" />
           <input id="nameInput" class="input" placeholder="${t('name')}" value="${escapeHtml(state.createForm.name)}" />
@@ -767,9 +793,10 @@ function renderApp(notice = '') {
             <button id="createButton" class="primary-button">${t('create')}</button>
           </div>
           <div id="createFeedback">${notice}</div>
-        </div>
+        </div>` : ''}
 
         <div class="card panel">
+          ${!canWriteEquipment() ? notice : ''}
           <h3>${t('searchTitle')}</h3>
           <input id="searchTagInput" class="input" placeholder="${t('searchPlaceholder')}" value="${escapeHtml(localStorage.getItem(CONFIG.STORAGE_KEYS.lastSearch) || '')}" />
           <div class="inline-actions">
@@ -789,6 +816,17 @@ function renderApp(notice = '') {
         <small class="subtle">Equipamentos sem unidade aparecem em “Todas as unidades”.</small>
       </div>
 
+      ${canManageUnits() ? `<div class="card panel" id="unitManagement">
+        <h3>Unidades</h3>
+        <form id="unitCreateForm" class="inline-actions">
+          <input id="unitName" class="input" aria-label="Nome da unidade" placeholder="Nome da unidade" required maxlength="200" />
+          <input id="unitSlug" class="input" aria-label="Código da unidade" placeholder="Código da unidade" required maxlength="100" />
+          <button class="primary-button" type="submit">Cadastrar unidade</button>
+        </form>
+        ${state.units.map(unit => `<div class="inline-actions"><span>${escapeHtml(unit.name)}</span>
+          <button class="outline-button" data-unit-toggle="${escapeHtml(unit.id)}" data-active="${unit.active ? 'false' : 'true'}">${unit.active ? 'Desativar' : 'Ativar'}</button></div>`).join('')}
+        <div id="unitFeedback" role="alert"></div>
+      </div>` : ''}
       ${renderDeleteConfirm()}
 
       <div class="card panel">
@@ -889,6 +927,27 @@ function bindLoginEvents() {
 }
 
 function bindEvents() {
+  const changeUnit = async (path, method, data) => {
+    if (!canManageUnits()) return;
+    try {
+      const response = await fetchWithTimeout(buildUrl(CONFIG.API_BASE_URL, path), {
+        method, headers: getAuthHeaders({'Content-Type': 'application/json'}), body: JSON.stringify(data)
+      });
+      if (!response.ok) throw new Error('Não foi possível salvar a unidade. Verifique os dados e permissões.');
+      await loadUnits();
+      if (state.authToken) renderApp();
+    } catch (error) {
+      const feedback = document.getElementById('unitFeedback');
+      if (feedback) feedback.textContent = error.message;
+    }
+  };
+  document.getElementById('unitCreateForm')?.addEventListener('submit', event => {
+    event.preventDefault();
+    changeUnit('/units', 'POST', {name: document.getElementById('unitName').value, slug: document.getElementById('unitSlug').value});
+  });
+  document.querySelectorAll('[data-unit-toggle]').forEach(button => button.addEventListener('click', () => {
+    changeUnit(`/units/${button.dataset.unitToggle}`, 'PATCH', {active: button.dataset.active === 'true'});
+  }));
   bindCreateFormLiveState();
 
   document.getElementById('unitFilter')?.addEventListener('change', async event => {
@@ -1145,6 +1204,7 @@ function renderQRCodes() {
 }
 
 window.startEditItem = function(id) {
+  if (!canWriteEquipment()) return;
   const item = getItemById(id);
   if (!item) return;
 
@@ -1170,6 +1230,7 @@ window.startEditItem = function(id) {
 };
 
 window.askDeleteItem = function(id) {
+  if (!canDeleteEquipment()) return;
   state.deleteTargetId = id;
   state.editingId = null;
   state.editDraft = null;
@@ -1179,6 +1240,7 @@ window.askDeleteItem = function(id) {
 function logoutAdmin() {
   state.authToken = '';
   state.authUser = '';
+  state.role = '';
   state.companyName = '';
   state.isSuperadmin = false;
   state.showSuperadmin = false;

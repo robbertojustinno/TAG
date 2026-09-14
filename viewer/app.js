@@ -5,12 +5,110 @@ const installButton = document.getElementById('installButton');
 
 const state = {
   screen: 'home',
+  authToken: sessionStorage.getItem(CONFIG.STORAGE_KEYS.authToken) || '',
+  identity: null,
+  pendingSelection: null,
+  sessionVersion: 0,
   currentItem: null,
   deferredPrompt: null,
   scanner: null,
   apiReachable: null,
   currentNotice: '',
 };
+
+function syncViewerIdentity() {
+  document.getElementById('authButton').textContent = state.authToken ? 'Sair' : 'Entrar';
+  document.getElementById('activeCompany').textContent = state.identity
+    ? `Empresa: ${state.identity.company_name}`
+    : state.authToken ? 'Verificando sessão…' : 'Empresa Padrão · Público';
+}
+
+function clearViewerSession() {
+  state.sessionVersion += 1;
+  state.authToken = '';
+  state.identity = null;
+  state.pendingSelection = null;
+  state.currentItem = null;
+  sessionStorage.removeItem(CONFIG.STORAGE_KEYS.authToken);
+  syncViewerIdentity();
+}
+
+function logoutViewer() {
+  destroyScanner();
+  clearViewerSession();
+  renderHome();
+}
+
+async function viewerAuthRequest(path, data, token = '') {
+  const version = state.sessionVersion;
+  const response = await fetchWithTimeout(`${CONFIG.API_BASE_URL.replace(/\/$/, '')}${path}`, {
+    method: data ? 'POST' : 'GET',
+    headers: {Accept: 'application/json', 'Content-Type': 'application/json',
+      ...(token ? {Authorization: `Bearer ${token}`} : {})},
+    ...(data ? {body: JSON.stringify(data)} : {})
+  });
+  if (!response.ok) throw new Error('Não foi possível entrar. Verifique suas credenciais e o acesso à empresa.');
+  const result = await response.json();
+  if (version !== state.sessionVersion) throw new Error('Sessão alterada. Consulte novamente.');
+  return result;
+}
+
+async function finishViewerLogin(result) {
+  if (!result.token) throw new Error('Sessão inválida. Entre novamente.');
+  const identity = await viewerAuthRequest('/auth/me', null, result.token);
+  state.sessionVersion += 1;
+  state.authToken = result.token;
+  state.identity = identity;
+  state.pendingSelection = null;
+  state.currentItem = null;
+  sessionStorage.setItem(CONFIG.STORAGE_KEYS.authToken, result.token);
+  syncViewerIdentity();
+  await openInitialQuery();
+}
+
+function renderViewerLogin(message = '') {
+  destroyScanner();
+  state.screen = 'login';
+  state.currentItem = null;
+  backButton.classList.remove('hidden');
+  const selection = state.pendingSelection;
+  app.innerHTML = `<section class="screen"><div class="card panel">
+    <h2>${selection ? 'Selecione a empresa' : 'Entrar no Viewer'}</h2>
+    <form id="viewerLoginForm">
+      ${selection ? `<label for="viewerCompany">Empresa</label>
+        <select id="viewerCompany" class="input" required>${selection.companies.map(company =>
+          `<option value="${escapeHtml(company.id)}">${escapeHtml(company.name)}</option>`).join('')}</select>`
+        : `<label for="viewerEmail">E-mail</label><input id="viewerEmail" class="input" type="email" autocomplete="username" required />
+          <label for="viewerPassword">Senha</label><input id="viewerPassword" class="input" type="password" autocomplete="current-password" required />`}
+      <div class="inline-actions"><button id="viewerLoginSubmit" class="primary-button" type="submit">${selection ? 'Selecionar empresa' : 'Entrar'}</button>
+        <button id="viewerLoginCancel" class="outline-button" type="button">Continuar sem login</button></div>
+      <div id="viewerLoginFeedback" role="alert">${escapeHtml(message)}</div>
+    </form>
+  </div></section>`;
+  document.getElementById('viewerLoginCancel').addEventListener('click', logoutViewer);
+  document.getElementById('viewerLoginForm').addEventListener('submit', async event => {
+    event.preventDefault();
+    const version = state.sessionVersion;
+    const button = document.getElementById('viewerLoginSubmit');
+    button.disabled = true;
+    try {
+      const result = selection
+        ? await viewerAuthRequest('/auth/select-company', {company_id: Number(document.getElementById('viewerCompany').value)}, selection.selection_token)
+        : await viewerAuthRequest('/auth/login', {email: document.getElementById('viewerEmail').value.trim(), password: document.getElementById('viewerPassword').value});
+      if (version !== state.sessionVersion) return;
+      if (result.requires_company_selection) {
+        state.pendingSelection = result;
+        renderViewerLogin();
+      } else {
+        await finishViewerLogin(result);
+      }
+    } catch (error) {
+      if (version === state.sessionVersion) renderViewerLogin(error.message);
+    } finally {
+      button.disabled = false;
+    }
+  });
+}
 
 function safeJsonParse(text) {
   try {
@@ -46,7 +144,7 @@ function getSettings() {
 }
 
 function saveRecentItem(item) {
-  if (!item) return;
+  if (!item || state.authToken) return;
   const key = CONFIG.STORAGE_KEYS.recentItems;
   const current = getStorageValue(key, []);
   const normalized = normalizeEquipment(item);
@@ -56,17 +154,19 @@ function saveRecentItem(item) {
 }
 
 function getRecentItems() {
+  if (state.authToken) return [];
   return getStorageValue(CONFIG.STORAGE_KEYS.recentItems, []);
 }
 
 function saveFallbackCache(item) {
-  if (!item?.tag) return;
+  if (!item?.tag || state.authToken) return;
   const cache = getStorageValue(CONFIG.STORAGE_KEYS.fallbackCache, {});
   cache[item.tag] = normalizeEquipment(item);
   setStorageValue(CONFIG.STORAGE_KEYS.fallbackCache, cache);
 }
 
 function getFallbackByTag(tag) {
+  if (state.authToken) return null;
   const cache = getStorageValue(CONFIG.STORAGE_KEYS.fallbackCache, {});
   return cache[tag] || null;
 }
@@ -117,7 +217,21 @@ async function fetchWithTimeout(url, options = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), CONFIG.REQUEST_TIMEOUT_MS);
   try {
-    return await fetch(url, { ...options, signal: controller.signal, cache: 'no-store' });
+    const version = state.sessionVersion;
+    const headers = new Headers(options.headers || {});
+    const target = new URL(url);
+    const api = new URL(CONFIG.API_BASE_URL);
+    const isApi = target.origin === api.origin && target.pathname.startsWith(api.pathname.replace(/\/$/, '') + '/');
+    if (state.authToken && isApi && !headers.has('Authorization')) headers.set('Authorization', `Bearer ${state.authToken}`);
+    const response = await fetch(url, { ...options, headers, signal: controller.signal, cache: 'no-store', redirect: 'error' });
+    if (version !== state.sessionVersion) throw new Error('Sessão alterada. Consulte novamente.');
+    if (response.ok && isApi) state.apiReachable = true;
+    if (state.authToken && isApi && [401, 403].includes(response.status)) {
+      clearViewerSession();
+      renderViewerLogin('Sessão expirada ou acesso revogado. Entre novamente.');
+      throw new Error('Sessão expirada ou acesso revogado.');
+    }
+    return response;
   } finally {
     clearTimeout(timer);
   }
@@ -125,18 +239,19 @@ async function fetchWithTimeout(url, options = {}) {
 
 async function tryFetchJson(url) {
   if (!url) return null;
+  const authenticated = Boolean(state.authToken);
+  const version = state.sessionVersion;
   try {
     const response = await fetchWithTimeout(url, { headers: { Accept: 'application/json' } });
-    if (!response.ok) return null;
-
-    const contentType = response.headers.get('content-type') || '';
-    if (!contentType.includes('application/json')) {
-      const text = await response.text();
-      return safeJsonParse(text) || null;
+    if (!response.ok) {
+      if (authenticated || [401, 403].includes(response.status)) throw new Error('Instrumento não encontrado ou acesso não autorizado.');
+      return null;
     }
-
-    return await response.json();
-  } catch {
+    const payload = safeJsonParse(await response.text());
+    if (version !== state.sessionVersion) throw new Error('Sessão alterada. Consulte novamente.');
+    return payload;
+  } catch (error) {
+    if (authenticated || version !== state.sessionVersion || error.message === 'Instrumento não encontrado ou acesso não autorizado.') throw error;
     return null;
   }
 }
@@ -172,7 +287,7 @@ async function searchByTag(tag) {
   const cleanTag = normalizeText(tag);
   if (!cleanTag) throw new Error('Informe uma TAG válida.');
 
-  localStorage.setItem(CONFIG.STORAGE_KEYS.lastSearch, cleanTag);
+  if (!state.authToken) localStorage.setItem(CONFIG.STORAGE_KEYS.lastSearch, cleanTag);
   const baseUrl = CONFIG.API_BASE_URL;
   const attempts = CONFIG.ENDPOINTS.byTag.map((template) => buildEndpoint(baseUrl, template, 'tag', cleanTag));
 
@@ -206,8 +321,10 @@ async function searchById(id) {
 
   for (const url of attempts) {
     const payload = await tryFetchJson(url);
-    const item = extractBestItem(payload);
-    if (item) {
+    const item = Array.isArray(payload)
+      ? normalizeEquipment(payload.find(row => String(row.id) === cleanId))
+      : extractBestItem(payload);
+    if (item && String(item.id) === cleanId) {
       item.source = 'api';
       saveRecentItem(item);
       if (item.tag && item.tag !== '-') saveFallbackCache(item);
@@ -289,6 +406,7 @@ function parseHybridText(text) {
 }
 
 async function resolveQrContent(content) {
+  const authenticated = Boolean(state.authToken);
   const parsed = parseHybridText(content);
   if (!parsed) throw new Error('QR vazio ou inválido.');
 
@@ -306,9 +424,10 @@ async function resolveQrContent(content) {
 
   if (parsed.kind === 'json') {
     if (parsed.tag) {
-      const item = await searchByTag(parsed.tag).catch(() => null);
+      const item = await searchByTag(parsed.tag).catch(error => { if (authenticated) throw error; return null; });
       if (item) return { item, notice: 'QR JSON reconhecido e consultado online.' };
     }
+    if (authenticated) throw new Error('O QR precisa identificar um equipamento da empresa ativa.');
     const fallbackItem = normalizeEquipment({ ...parsed.data, source: 'hybrid-offline' });
     saveRecentItem(fallbackItem);
     saveFallbackCache(fallbackItem);
@@ -317,10 +436,11 @@ async function resolveQrContent(content) {
 
   if (parsed.kind === 'pairs') {
     if (parsed.tag) {
-      const item = await searchByTag(parsed.tag).catch(() => null);
+      const item = await searchByTag(parsed.tag).catch(error => { if (authenticated) throw error; return null; });
       if (item) return { item, notice: 'QR híbrido reconhecido por TAG.' };
     }
 
+    if (authenticated) throw new Error('O QR precisa identificar um equipamento da empresa ativa.');
     const fallbackItem = normalizeEquipment({
       tag: parsed.data.tag || parsed.data.codigo || '-',
       name: parsed.data.nome || parsed.data.name || 'Instrumento',
@@ -381,6 +501,8 @@ function getUrlQuery() {
 
 function updateUrl(item) {
   const url = new URL(window.location.href);
+  url.search = '';
+  url.hash = '';
   if (item?.tag && item.tag !== '-') {
     url.searchParams.set('tag', item.tag);
     url.searchParams.delete('id');
@@ -491,7 +613,7 @@ function renderHome() {
 function renderSearch() {
   state.screen = 'search';
   backButton.classList.remove('hidden');
-  const last = localStorage.getItem(CONFIG.STORAGE_KEYS.lastSearch) || '';
+  const last = state.authToken ? '' : localStorage.getItem(CONFIG.STORAGE_KEYS.lastSearch) || '';
 
   app.innerHTML = `
     <section class="screen">
@@ -507,7 +629,7 @@ function renderSearch() {
 
       <div class="card panel">
         <h3>Dica</h3>
-        <div class="notice">Quando a API falhar, o Viewer tenta exibir cache local da última leitura conhecida para aquela TAG.</div>
+        <div class="notice">${state.authToken ? 'A consulta da empresa ativa exige conexão com a API.' : 'Quando a API falhar, o Viewer tenta exibir cache local da última leitura conhecida para aquela TAG.'}</div>
       </div>
     </section>
   `;
@@ -766,6 +888,7 @@ function openImageModal(src) {
 
 backButton.addEventListener('click', () => {
   destroyScanner();
+  if (state.screen === 'login') { logoutViewer(); return; }
   if (state.screen && state.screen !== 'home') {
     renderHome();
     return;
@@ -801,8 +924,8 @@ if ('serviceWorker' in navigator) {
   });
 }
 
-async function boot() {
-  await pingApi().catch(() => null);
+async function openInitialQuery() {
+  const version = state.sessionVersion;
   const query = getUrlQuery();
 
   if (query.tag) {
@@ -811,6 +934,7 @@ async function boot() {
       renderDetail(item, 'Consulta aberta diretamente pelo link.');
       return;
     } catch {
+      if (version !== state.sessionVersion) return;
       // continue to home
     }
   }
@@ -821,11 +945,32 @@ async function boot() {
       renderDetail(item, 'Consulta aberta diretamente pelo link.');
       return;
     } catch {
+      if (version !== state.sessionVersion) return;
       // continue to home
     }
   }
 
   renderHome();
+}
+
+document.getElementById('authButton').addEventListener('click', () => {
+  if (state.authToken) logoutViewer();
+  else renderViewerLogin();
+});
+
+async function boot() {
+  syncViewerIdentity();
+  if (state.authToken) {
+    try {
+      state.identity = await viewerAuthRequest('/auth/me', null, state.authToken);
+      syncViewerIdentity();
+    } catch {
+      renderViewerLogin('Não foi possível validar sua sessão. Entre novamente ou continue sem login.');
+      return;
+    }
+  }
+  await pingApi().catch(() => null);
+  await openInitialQuery();
 }
 
 boot();
