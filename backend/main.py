@@ -58,7 +58,61 @@ engine = make_engine(DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 try:
     MIGRATION = migrate(engine, ADMIN_USERNAME, ADMIN_PASSWORD, ADMIN_EMAIL)
-except Exception:
+except Exception as migration_error:
+    import logging
+    import re
+
+    driver_error = getattr(migration_error, "orig", None)
+    sqlstate = (getattr(driver_error, "sqlstate", None)
+                or getattr(driver_error, "pgcode", None)
+                or getattr(migration_error, "sqlstate", None)
+                or getattr(migration_error, "pgcode", None))
+    if not isinstance(sqlstate, str) or not re.fullmatch(r"[0-9A-Z]{5}", sqlstate):
+        sqlstate = "unavailable"
+
+    # Never log exception text, SQL, parameters, connection URLs or tracebacks.
+    # Classify locally and emit only fixed diagnostic phrases.
+    diagnostic = {
+        "28P01": "authentication failed",
+        "28000": "invalid authorization specification",
+        "42501": "permission denied",
+        "3D000": "database does not exist",
+        "3F000": "invalid schema name",
+        "42P01": "undefined table",
+        "42703": "undefined column",
+        "23502": "not-null constraint violation",
+        "23503": "foreign key constraint violation",
+        "23505": "unique constraint violation",
+        "23514": "check constraint violation",
+        "53300": "too many connections",
+        "57014": "query canceled or statement timeout",
+    }.get(sqlstate)
+    if diagnostic is None:
+        error_text = str(driver_error if driver_error is not None else migration_error).lower()
+        diagnostic = "migration failed; details withheld"
+        for marker, safe_message in (
+            ("password authentication failed", "authentication failed"),
+            ("could not translate host name", "could not translate host name"),
+            ("name or service not known", "could not translate host name"),
+            ("timeout", "timeout"),
+            ("timed out", "timeout"),
+            ("connection refused", "connection refused"),
+            ("permission denied", "permission denied"),
+            ("invalid existing company association", "invalid existing company association"),
+            ("equipment count changed", "equipment count changed"),
+        ):
+            if marker in error_text:
+                diagnostic = safe_message
+                break
+        del error_text
+
+    exception_type = re.sub(r"[^a-zA-Z0-9_]", "", type(migration_error).__name__)[:80]
+    driver_type = (re.sub(r"[^a-zA-Z0-9_]", "", type(driver_error).__name__)[:80]
+                   if driver_error is not None else "unavailable")
+    logging.getLogger(__name__).error(
+        "Migration failed: exception=%s SQLSTATE=%s driver=%s message=%s",
+        exception_type, sqlstate, driver_type, diagnostic,
+    )
     engine.dispose()
     raise RuntimeError("Database migration failed; no automatic destructive repair was attempted") from None
 DEFAULT_COMPANY_ID = MIGRATION["default_company_id"]
