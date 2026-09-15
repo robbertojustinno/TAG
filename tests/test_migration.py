@@ -54,6 +54,8 @@ class MigrationTests(unittest.TestCase):
             self.assertEqual(before['company_id'],first['default_company_id'])
             self.assertEqual(c.execute(text('SELECT name FROM companies WHERE id=:id'),{'id':first['default_company_id']}).scalar_one(),'Empresa Padrão')
         self.assertEqual(self.migrate()['assigned'],0)
+        self.assertIn('asset_categories', inspect(self.engine).get_table_names())
+        self.assertIn('category_id', {c['name'] for c in inspect(self.engine).get_columns('tagcheck_equipment')})
         with self.engine.connect() as c:
             after=c.execute(text('SELECT * FROM tagcheck_equipment')).mappings().one()
             self.assertEqual(dict(before),dict(after))

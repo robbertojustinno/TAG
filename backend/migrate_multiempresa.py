@@ -3,10 +3,10 @@ import os
 from sqlalchemy import create_engine, event, inspect, select, text
 from sqlalchemy.orm import Session
 if __package__:
-    from .models import Base, Company, Unit, User, UserCompany, Equipment, DEFAULT_COMPANY_SLUG
+    from .models import Base, Company, Unit, User, UserCompany, Equipment, AssetCategory, DEFAULT_COMPANY_SLUG
     from .passwords import hash_password, verify_password
 else:
-    from models import Base, Company, Unit, User, UserCompany, Equipment, DEFAULT_COMPANY_SLUG
+    from models import Base, Company, Unit, User, UserCompany, Equipment, AssetCategory, DEFAULT_COMPANY_SLUG
     from passwords import hash_password, verify_password
 
 def make_engine(url):
@@ -82,7 +82,7 @@ def migrate(engine, username, password, email):
             # Block concurrent equipment writes while checking and normalizing.
             connection.execute(text('LOCK TABLE tagcheck_equipment IN SHARE ROW EXCLUSIVE MODE'))
         before = connection.execute(text('SELECT COUNT(*) FROM tagcheck_equipment')).scalar_one() if existing else 0
-        Base.metadata.create_all(connection, tables=[Company.__table__, Unit.__table__, User.__table__, UserCompany.__table__])
+        Base.metadata.create_all(connection, tables=[Company.__table__, Unit.__table__, User.__table__, UserCompany.__table__, AssetCategory.__table__])
         user_columns = {c['name'] for c in inspect(connection).get_columns('users')}
         if 'must_change_password' not in user_columns:
             connection.execute(text('ALTER TABLE users ADD COLUMN must_change_password BOOLEAN NOT NULL DEFAULT false'))
@@ -122,6 +122,8 @@ def migrate(engine, username, password, email):
                 connection.execute(text('ALTER TABLE tagcheck_equipment ADD COLUMN company_id INTEGER REFERENCES companies(id)'))
             if 'unit_id' not in columns:
                 connection.execute(text('ALTER TABLE tagcheck_equipment ADD COLUMN unit_id INTEGER REFERENCES units(id) ON DELETE RESTRICT'))
+            if 'category_id' not in columns:
+                connection.execute(text('ALTER TABLE tagcheck_equipment ADD COLUMN category_id INTEGER REFERENCES asset_categories(id) ON DELETE RESTRICT'))
             # Preserve the existing optional-column upgrade for older installations.
             for name in ('equipment_type', 'sector', 'location', 'manufacturer', 'model', 'serial_number', 'calibration_date', 'next_calibration_date', 'status', 'notes'):
                 if name not in columns:
@@ -136,6 +138,7 @@ def migrate(engine, username, password, email):
             connection.execute(text('UPDATE tagcheck_equipment SET tag=:normalized_tag WHERE id=:equipment_id'), tag_updates)
         connection.execute(text('CREATE INDEX IF NOT EXISTS ix_tagcheck_equipment_company_id ON tagcheck_equipment(company_id)'))
         connection.execute(text('CREATE INDEX IF NOT EXISTS ix_tagcheck_equipment_unit_id ON tagcheck_equipment(unit_id)'))
+        connection.execute(text('CREATE INDEX IF NOT EXISTS ix_tagcheck_equipment_category_id ON tagcheck_equipment(category_id)'))
         if engine.dialect.name == 'postgresql':
             connection.execute(text('ALTER TABLE tagcheck_equipment ALTER COLUMN company_id SET NOT NULL'))
         else:

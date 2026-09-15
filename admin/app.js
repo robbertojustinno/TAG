@@ -182,6 +182,8 @@ const state = {
   items: [],
   units: [],
   selectedUnitId: '',
+  categories: [],
+  selectedCategoryId: '',
   apiReachable: null,
   createPreviewUrl: '',
   createPhotoFile: null,
@@ -197,7 +199,8 @@ const state = {
     calibration_date: '',
     next_calibration_date: '',
     status: 'Ativo',
-    notes: ''
+    notes: '',
+    category_id: ''
   },
   editingId: null,
   editDraft: null,
@@ -277,6 +280,7 @@ function resetCreateForm() {
     next_calibration_date: '',
     status: 'Ativo',
     notes: ''
+    ,category_id: ''
   };
 }
 
@@ -343,6 +347,8 @@ function normalizeItem(raw) {
     next_calibration_date: raw.next_calibration_date ?? '',
     status: raw.status ?? t('active'),
     notes: raw.notes ?? '',
+    category_id: raw.category_id ?? '',
+    category_path: Array.isArray(raw.category_path) ? raw.category_path : [],
     qr_payload: raw.qr_payload ?? ''
   };
 }
@@ -398,6 +404,7 @@ async function finishLogin(result) {
   syncHeaderLanguage();
   await refreshCompanyLogo();
   await loadUnits();
+  await loadCategories();
   await loadItems();
   if (state.authToken) renderApp();
 }
@@ -491,9 +498,10 @@ function renderCompanySelection(notice = '') {
 }
 
 async function loadItems() {
-  const path = state.selectedUnitId
-    ? `${CONFIG.ENDPOINTS.list}?unit_id=${encodeURIComponent(state.selectedUnitId)}`
-    : CONFIG.ENDPOINTS.list;
+  const params = [];
+  if (state.selectedUnitId) params.push(`unit_id=${encodeURIComponent(state.selectedUnitId)}`);
+  if (state.selectedCategoryId) params.push(`category_id=${encodeURIComponent(state.selectedCategoryId)}`, 'include_children=true');
+  const path = params.length ? `${CONFIG.ENDPOINTS.list}?${params.join('&')}` : CONFIG.ENDPOINTS.list;
   const response = await fetchWithTimeout(buildUrl(CONFIG.API_BASE_URL, path), {
     headers: getAuthHeaders({ Accept: 'application/json' })
   });
@@ -503,6 +511,37 @@ async function loadItems() {
   const data = await response.json();
   state.items = Array.isArray(data) ? data.map(normalizeItem) : [];
   return state.items;
+}
+
+async function loadCategories() {
+  const response = await fetchWithTimeout(buildUrl(CONFIG.API_BASE_URL, '/asset-categories'), {
+    headers: getAuthHeaders({ Accept: 'application/json' })
+  });
+  if (!response.ok) throw new Error(t('listError'));
+  state.categories = await response.json();
+  return state.categories;
+}
+
+function categoryOptions(selected = '') {
+  const rows = [...state.categories].sort((a, b) => (a.parent_id || 0) - (b.parent_id || 0) || a.sort_order - b.sort_order || a.name.localeCompare(b.name));
+  const byParent = new Map();
+  rows.forEach(row => byParent.set(row.parent_id || 0, [...(byParent.get(row.parent_id || 0) || []), row]));
+  const result = [];
+  const walk = (parent, depth) => (byParent.get(parent) || []).forEach(row => {
+    result.push(`<option value="${escapeHtml(row.id)}" ${String(row.id) === String(selected) ? 'selected' : ''}>${'&nbsp;'.repeat(depth * 4)}${escapeHtml(row.name)}${row.asset_count ? ` (${row.asset_count})` : ''}</option>`);
+    walk(row.id, depth + 1);
+  });
+  walk(0, 0);
+  return result.join('');
+}
+
+function categoryManagerHtml() {
+  if (!state.categories.length && !canManageUnits()) return '';
+  const byParent = new Map(); state.categories.forEach(c => byParent.set(c.parent_id || 0, [...(byParent.get(c.parent_id || 0) || []), c]));
+  const node = (parent, depth = 0) => (byParent.get(parent) || []).map(c => `<div class="category-node" style="padding-left:${depth * 14}px"><button type="button" class="outline-button" data-category-id="${c.id}">${escapeHtml(c.name)} (${c.asset_count || 0})</button>${canManageUnits() ? `<button type="button" class="outline-button" data-category-edit="${c.id}">Editar</button><button type="button" class="outline-button" data-category-active="${c.id}" data-active="${!c.active}">${c.active ? 'Desativar' : 'Ativar'}</button>` : ''}${node(c.id, depth + 1)}</div>`).join('');
+  return `<div class="card panel asset-manager"><div class="inline-actions" style="justify-content:space-between"><h3>Gerenciador de ativos</h3>${canManageUnits() ? '<button id="newCategoryButton" class="primary-button" type="button">+ Nova categoria</button>' : ''}</div>
+    <div class="asset-manager-grid"><div><label>Categoria</label><select id="categoryFilter" class="input"><option value="">Todas as categorias</option>${categoryOptions(state.selectedCategoryId)}</select><div class="category-tree">${node(0)}</div></div>
+    <div><p class="subtle">Selecione uma categoria para mostrar ativos do ramo. Categorias existentes sem vínculo mantêm os equipamentos em “Todas as categorias”.</p><div id="categoryFeedback"></div></div></div></div>`;
 }
 
 async function loadUnits() {
@@ -522,10 +561,11 @@ async function searchByTag(tag) {
 
   localStorage.setItem(CONFIG.STORAGE_KEYS.lastSearch, cleanTag);
 
-  const url = buildUrl(
-    CONFIG.API_BASE_URL,
-    CONFIG.ENDPOINTS.byTag.replace(':tag', encodeURIComponent(cleanTag))
-  );
+  const searchPath = buildUrl(CONFIG.API_BASE_URL,
+    CONFIG.ENDPOINTS.byTag.replace(':tag', encodeURIComponent(cleanTag)));
+  const searchParams = [];
+  if (state.selectedCategoryId) searchParams.push(`category_id=${encodeURIComponent(state.selectedCategoryId)}`, 'include_children=true');
+  const url = `${searchPath}${searchParams.length ? `?${searchParams.join('&')}` : ''}`;
 
   const response = await fetchWithTimeout(url, {
     headers: getAuthHeaders({ Accept: 'application/json' })
@@ -664,6 +704,7 @@ function createAdditionalFields(prefix, values) {
       <input id="${prefix}CalibrationDateInput" class="input" type="${calibrationType}" placeholder="${t('calibrationDate')}" value="${escapeHtml(values.calibration_date || '')}" />
       <input id="${prefix}NextCalibrationDateInput" class="input" type="${nextCalibrationType}" placeholder="${t('nextCalibrationDate')}" value="${escapeHtml(values.next_calibration_date || '')}" />
       <input id="${prefix}StatusInput" class="input" placeholder="${t('chooseStatus')}" value="${escapeHtml(values.status || 'Ativo')}" />
+      <label>Categoria<select id="${prefix}CategoryInput" class="input"><option value="">Sem categoria</option>${categoryOptions(values.category_id || '')}</select></label>
       <input id="${prefix}NotesInput" class="input" placeholder="${t('notes')}" value="${escapeHtml(values.notes || '')}" />
     </div>
   `;
@@ -683,6 +724,7 @@ function renderEditableRow(item) {
     next_calibration_date: item.next_calibration_date || '',
     status: item.status || 'Ativo',
     notes: item.notes || '',
+    category_id: item.category_id || '',
     photoFile: null,
     previewUrl: item.photo || ''
   };
@@ -741,6 +783,7 @@ function renderRows(items) {
           <div class="muted">${escapeHtml(item.equipment_type || '')}</div>
           <div class="muted">${escapeHtml(item.model || '')}</div>
           <div class="muted">${escapeHtml(item.serial_number || '')}</div>
+          <div class="muted">${escapeHtml((item.category_path || []).join(' > ') || 'Sem categoria')}</div>
         </td>
         <td>${photoHtml(item)}</td>
         <td>${statusPill(item.status)}</td>
@@ -879,6 +922,8 @@ function renderApp(notice = '') {
         <small class="subtle">Equipamentos sem unidade aparecem em “Todas as unidades”.</small>
       </div>
 
+      ${categoryManagerHtml()}
+
       ${canManageUnits() ? `<div class="card panel" id="unitManagement">
         <h3>Unidades</h3>
         <form id="unitCreateForm" class="inline-actions">
@@ -938,6 +983,7 @@ function updateCreateFormState() {
   state.createForm.next_calibration_date = normalizeText(document.getElementById('createNextCalibrationDateInput')?.value);
   state.createForm.status = normalizeText(document.getElementById('createStatusInput')?.value) || 'Ativo';
   state.createForm.notes = normalizeText(document.getElementById('createNotesInput')?.value);
+  state.createForm.category_id = document.getElementById('createCategoryInput')?.value || '';
 }
 
 function bindCreateFormLiveState() {
@@ -953,7 +999,8 @@ function bindCreateFormLiveState() {
     'createCalibrationDateInput',
     'createNextCalibrationDateInput',
     'createStatusInput',
-    'createNotesInput'
+    'createNotesInput',
+    'createCategoryInput'
   ].forEach((id) => {
     document.getElementById(id)?.addEventListener('input', updateCreateFormState);
     document.getElementById(id)?.addEventListener('change', updateCreateFormState);
@@ -1023,6 +1070,42 @@ function bindEvents() {
     }
   });
 
+  document.getElementById('categoryFilter')?.addEventListener('change', async event => {
+    state.selectedCategoryId = event.target.value;
+    try { await loadItems(); renderApp(); }
+    catch (error) { renderApp(`<div class="notice error">${escapeHtml(error.message || t('listError'))}</div>`); }
+  });
+  document.querySelectorAll('[data-category-id]').forEach(button => button.addEventListener('click', async () => {
+    state.selectedCategoryId = button.dataset.categoryId;
+    await loadItems();
+    renderApp();
+  }));
+  document.getElementById('newCategoryButton')?.addEventListener('click', async () => {
+    const name = window.prompt('Nome da categoria');
+    if (!name || !name.trim()) return;
+    const response = await fetchWithTimeout(buildUrl(CONFIG.API_BASE_URL, '/asset-categories'), {
+      method: 'POST', headers: getAuthHeaders({'Content-Type': 'application/json'}),
+      body: JSON.stringify({name: name.trim()})
+    });
+    if (!response.ok) { const feedback = document.getElementById('categoryFeedback'); if (feedback) feedback.textContent = 'Não foi possível criar a categoria.'; return; }
+    await loadCategories(); renderApp();
+  });
+  document.querySelectorAll('[data-category-edit]').forEach(button => button.addEventListener('click', async () => {
+    const category = state.categories.find(item => String(item.id) === button.dataset.categoryEdit);
+    const name = window.prompt('Nome da categoria', category?.name || '');
+    if (!name || !name.trim()) return;
+    const response = await fetchWithTimeout(buildUrl(CONFIG.API_BASE_URL, `/asset-categories/${button.dataset.categoryEdit}`), {
+      method: 'PATCH', headers: getAuthHeaders({'Content-Type': 'application/json'}), body: JSON.stringify({name: name.trim()})
+    });
+    if (response.ok) { await loadCategories(); renderApp(); }
+  }));
+  document.querySelectorAll('[data-category-active]').forEach(button => button.addEventListener('click', async () => {
+    const response = await fetchWithTimeout(buildUrl(CONFIG.API_BASE_URL, `/asset-categories/${button.dataset.categoryActive}`), {
+      method: 'PATCH', headers: getAuthHeaders({'Content-Type': 'application/json'}), body: JSON.stringify({active: button.dataset.active === 'true'})
+    });
+    if (response.ok) { await loadCategories(); renderApp(); }
+  }));
+
   document.getElementById('photoInput')?.addEventListener('change', (event) => {
     updateCreateFormState();
     const file = event.target.files?.[0];
@@ -1068,6 +1151,7 @@ function bindEvents() {
     formData.append('next_calibration_date', state.createForm.next_calibration_date);
     formData.append('status', state.createForm.status);
     formData.append('notes', state.createForm.notes);
+    formData.append('category_id', state.createForm.category_id || '');
 
     feedback.innerHTML = `<div class="notice">${t('creating')}</div>`;
 
@@ -1153,6 +1237,7 @@ function bindEvents() {
     'editNextCalibrationDateInput',
     'editStatusInput',
     'editNotesInput'
+    ,'editCategoryInput'
   ].forEach((id) => {
     document.getElementById(id)?.addEventListener('input', () => {
       state.editDraft = {
@@ -1169,6 +1254,7 @@ function bindEvents() {
         next_calibration_date: normalizeText(document.getElementById('editNextCalibrationDateInput')?.value),
         status: normalizeText(document.getElementById('editStatusInput')?.value),
         notes: normalizeText(document.getElementById('editNotesInput')?.value),
+        category_id: document.getElementById('editCategoryInput')?.value || '',
       };
     });
     document.getElementById(id)?.addEventListener('change', () => {
@@ -1186,6 +1272,7 @@ function bindEvents() {
         next_calibration_date: normalizeText(document.getElementById('editNextCalibrationDateInput')?.value),
         status: normalizeText(document.getElementById('editStatusInput')?.value),
         notes: normalizeText(document.getElementById('editNotesInput')?.value),
+        category_id: document.getElementById('editCategoryInput')?.value || '',
       };
     });
   });
@@ -1206,6 +1293,7 @@ function bindEvents() {
     form.append('next_calibration_date', state.editDraft.next_calibration_date || '');
     form.append('status', state.editDraft.status || 'Ativo');
     form.append('notes', state.editDraft.notes || '');
+    form.append('category_id', state.editDraft.category_id || '');
 
     if (state.editDraft.photoFile) {
       form.append('photo', state.editDraft.photoFile);
@@ -1286,6 +1374,7 @@ window.startEditItem = function(id) {
     next_calibration_date: item.next_calibration_date || '',
     status: item.status || 'Ativo',
     notes: item.notes || '',
+    category_id: item.category_id || '',
     photoFile: null,
     previewUrl: item.photo || ''
   };
@@ -1394,6 +1483,7 @@ async function boot() {
       syncHeaderLanguage();
       await refreshCompanyLogo();
       await loadUnits();
+      await loadCategories();
       await loadItems();
       renderApp();
     } else {

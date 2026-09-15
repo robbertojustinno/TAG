@@ -60,6 +60,21 @@ class UserCompany(Base):
     role = Column(String(30), nullable=False)
     active = Column(Boolean, nullable=False, default=True)
 
+class AssetCategory(Base):
+    __tablename__ = 'asset_categories'
+    __table_args__ = (UniqueConstraint('company_id', 'parent_id', 'slug', name='uq_asset_category_company_parent_slug'),)
+    id = Column(Integer, primary_key=True)
+    company_id = Column(Integer, ForeignKey('companies.id', ondelete='RESTRICT'), nullable=False, index=True)
+    parent_id = Column(Integer, ForeignKey('asset_categories.id', ondelete='RESTRICT'), nullable=True, index=True)
+    name = Column(String(200), nullable=False)
+    slug = Column(String(100), nullable=False)
+    active = Column(Boolean, nullable=False, default=True)
+    sort_order = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
+    parent = relationship('AssetCategory', remote_side=[id], back_populates='children')
+    children = relationship('AssetCategory', back_populates='parent', passive_deletes=True)
+    company = relationship('Company')
+
 def legacy_company_default(context):
     """Compatibility for existing Python integrations; API writes set company explicitly."""
     company_id = context.connection.execute(select(Company.id).where(Company.slug == DEFAULT_COMPANY_SLUG)).scalar_one()
@@ -74,7 +89,9 @@ class Equipment(Base):
     company_id = Column(Integer, ForeignKey('companies.id', ondelete='RESTRICT'), nullable=False,
                         index=True, default=legacy_company_default)
     unit_id = Column(Integer, ForeignKey('units.id', ondelete='RESTRICT'), nullable=True, index=True)
+    category_id = Column(Integer, ForeignKey('asset_categories.id', ondelete='RESTRICT'), nullable=True, index=True)
     unit = relationship('Unit')
+    category = relationship('AssetCategory')
     tag = Column(String, index=True, nullable=False)
     name = Column(String, nullable=False)
     photo = Column(String, nullable=False)

@@ -816,3 +816,9 @@ select option {
   color: #111827;
   background: #ffffff;
 }
+
+.asset-manager-grid { display: grid; grid-template-columns: minmax(260px, 0.8fr) minmax(300px, 1.2fr); gap: 18px; }
+.category-tree { display: grid; gap: 6px; margin-top: 10px; max-height: 320px; overflow: auto; }
+.category-node { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.category-node > button:first-child { flex: 1; text-align: left; }
+@media (max-width: 800px) { .asset-manager-grid { grid-template-columns: 1fr; } }

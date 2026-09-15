@@ -254,6 +254,7 @@ function normalizeEquipment(raw) {
     tag: source.tag ?? source.codigo ?? source.code ?? source.patrimonio ?? source.asset_code ?? source.instrument_tag ?? '-',
     name: source.name ?? source.nome ?? source.description ?? source.descricao ?? source.instrumento ?? source.equipment_name ?? 'Instrumento',
     type: source.type ?? source.tipo ?? source.category ?? source.categoria ?? '-',
+    categoryPath: Array.isArray(source.category_path) ? source.category_path : (source.category_name ? [source.category_name] : []),
     serial: source.serial ?? source.serial_number ?? source.numero_serie ?? '-',
     sector: source.sector ?? source.setor ?? source.area ?? source.location_sector ?? '-',
     location: source.location ?? source.localizacao ?? source.local ?? source.room ?? '-',
@@ -883,6 +884,7 @@ function renderDetail(item, noticeText = '') {
         <h3>Dados do instrumento</h3>
         <div class="meta-grid">
           ${metaItem('Tipo', itemSafe.type)}
+          ${metaItem('Categoria', itemSafe.categoryPath.join(' > '))}
           ${metaItem('Setor', itemSafe.sector)}
           ${metaItem('Localização', itemSafe.location)}
           ${metaItem('Fabricante', itemSafe.manufacturer)}

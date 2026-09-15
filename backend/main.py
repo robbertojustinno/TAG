@@ -43,17 +43,19 @@ CLOUDINARY_API_SECRET = required_env("CLOUDINARY_API_SECRET")
 SESSION_TTL_SECONDS = 8 * 60 * 60
 
 if __package__:
-    from .models import Base, Company, Unit, User, UserCompany, Equipment, DEFAULT_COMPANY_SLUG
+    from .models import Base, Company, Unit, User, UserCompany, Equipment, AssetCategory, DEFAULT_COMPANY_SLUG
     from .migrate_multiempresa import make_engine, migrate
     from .tenancy import Tenancy, CompanyContext, equipment_query
     from .admin_api import build_router
     from .company_api import build_company_router
+    from .category_api import build_category_router
 else:
-    from models import Base, Company, Unit, User, UserCompany, Equipment, DEFAULT_COMPANY_SLUG
+    from models import Base, Company, Unit, User, UserCompany, Equipment, AssetCategory, DEFAULT_COMPANY_SLUG
     from migrate_multiempresa import make_engine, migrate
     from tenancy import Tenancy, CompanyContext, equipment_query
     from admin_api import build_router
     from company_api import build_company_router
+    from category_api import build_category_router
 
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "legacy-admin@tagcheck.invalid").strip().lower()
 engine = make_engine(DATABASE_URL)
@@ -124,6 +126,7 @@ auth = Tenancy(SessionLocal, ADMIN_TOKEN, DEFAULT_COMPANY_ID, LEGACY_USER_ID, AD
 app = FastAPI()
 app.include_router(build_router(auth))
 app.include_router(build_company_router(auth))
+app.include_router(build_category_router(auth))
 
 @app.exception_handler(RequestValidationError)
 async def safe_validation_error(request: Request, exc: RequestValidationError):
@@ -176,10 +179,19 @@ def build_qr_payload(item: Equipment) -> str:
 
 
 def serialize_equipment(item: Equipment) -> dict:
+    category_path = []
+    category = item.category
+    while category is not None:
+        category_path.append(category.name)
+        category = category.parent
+    category_path.reverse()
     return {
         "id": item.id,
         "unit_id": item.unit_id,
         "unit_name": item.unit.name if item.unit is not None else None,
+        "category_id": item.category_id,
+        "category_name": item.category.name if item.category is not None else None,
+        "category_path": category_path,
         "tag": item.tag,
         "name": item.name,
         "photo": item.photo,
@@ -217,6 +229,12 @@ def validate_equipment_unit(db, unit_id, company_id):
     if unit_id is not None and not db.query(Unit).filter(Unit.id == unit_id, Unit.company_id == company_id).first():
         raise HTTPException(status_code=404, detail="Unit not found in the active company")
 
+def validate_equipment_category(db, category_id, company_id):
+    if category_id is not None and not db.query(AssetCategory).filter(
+        AssetCategory.id == category_id, AssetCategory.company_id == company_id
+    ).first():
+        raise HTTPException(status_code=404, detail="Category not found in the active company")
+
 
 @app.post("/equipment")
 async def create_equipment(
@@ -224,6 +242,7 @@ async def create_equipment(
     name: str = Form(...),
     photo: UploadFile = File(...),
     unit_id: int | None = Form(None, gt=0),
+    category_id: int | None = Form(None, gt=0),
     equipment_type: str = Form(""),
     sector: str = Form(""),
     location: str = Form(""),
@@ -247,6 +266,7 @@ async def create_equipment(
     db = SessionLocal()
     try:
         validate_equipment_unit(db, unit_id, _auth.company_id)
+        validate_equipment_category(db, category_id, _auth.company_id)
         existing = equipment_query(db, _auth).filter(Equipment.tag == tag).first()
         if existing:
             raise HTTPException(status_code=400, detail="TAG jÃ¡ cadastrada.")
@@ -263,6 +283,7 @@ async def create_equipment(
         item = Equipment(
             company_id=_auth.company_id,
             unit_id=unit_id,
+            category_id=category_id,
             tag=tag,
             name=name.strip(),
             photo=image_url,
@@ -296,7 +317,7 @@ async def create_equipment(
 
 
 @app.get("/equipment")
-def list_equipment(unit_id: int | None = Query(None, gt=0), _auth: CompanyContext = Depends(auth.read_context)):
+def list_equipment(unit_id: int | None = Query(None, gt=0), category_id: int | None = Query(None, gt=0), include_children: bool = Query(False), _auth: CompanyContext = Depends(auth.read_context)):
     db = SessionLocal()
     try:
         if unit_id is not None:
@@ -305,9 +326,23 @@ def list_equipment(unit_id: int | None = Query(None, gt=0), _auth: CompanyContex
             unit = db.query(Unit).filter(Unit.id == unit_id, Unit.company_id == _auth.company_id).first()
             if not unit:
                 raise HTTPException(status_code=404, detail="Unit not found in the active company")
+        category_ids = None
+        if category_id is not None:
+            root = db.query(AssetCategory).filter(AssetCategory.id == category_id, AssetCategory.company_id == _auth.company_id).first()
+            if not root:
+                raise HTTPException(status_code=404, detail="Category not found in the active company")
+            category_ids = [root.id]
+            if include_children:
+                pending = [root.id]
+                while pending:
+                    child_ids = [row.id for row in db.query(AssetCategory.id).filter(AssetCategory.parent_id.in_(pending), AssetCategory.company_id == _auth.company_id)]
+                    category_ids.extend(child_ids)
+                    pending = child_ids
         query = equipment_query(db, _auth)
         if unit_id is not None:
             query = query.filter(Equipment.unit_id == unit_id)
+        if category_ids is not None:
+            query = query.filter(Equipment.category_id.in_(category_ids))
         items = query.order_by(Equipment.id.desc()).all()
         return [serialize_equipment(i) for i in items]
     finally:
@@ -315,11 +350,24 @@ def list_equipment(unit_id: int | None = Query(None, gt=0), _auth: CompanyContex
 
 
 @app.get("/equipment/tag/{tag}")
-def get_by_tag(tag: str, _auth: CompanyContext = Depends(auth.read_context)):
+def get_by_tag(tag: str, category_id: int | None = Query(None, gt=0), include_children: bool = Query(False), _auth: CompanyContext = Depends(auth.read_context)):
     db = SessionLocal()
     try:
         clean_tag = tag.strip().upper()
-        item = equipment_query(db, _auth).filter(Equipment.tag == clean_tag).first()
+        query = equipment_query(db, _auth).filter(Equipment.tag == clean_tag)
+        if category_id is not None:
+            root = db.query(AssetCategory).filter(AssetCategory.id == category_id, AssetCategory.company_id == _auth.company_id).first()
+            if not root:
+                raise HTTPException(status_code=404, detail="Category not found in the active company")
+            category_ids = [root.id]
+            if include_children:
+                pending = [root.id]
+                while pending:
+                    child_ids = [row.id for row in db.query(AssetCategory.id).filter(AssetCategory.parent_id.in_(pending), AssetCategory.company_id == _auth.company_id)]
+                    category_ids.extend(child_ids)
+                    pending = child_ids
+            query = query.filter(Equipment.category_id.in_(category_ids))
+        item = query.first()
         if not item:
             raise HTTPException(status_code=404, detail="Equipamento nÃ£o encontrado.")
         return serialize_equipment(item)
@@ -356,6 +404,7 @@ async def update_equipment(
     name: str = Form(...),
     photo: UploadFile | None = File(None),
     unit_id: int | None = Form(None, gt=0),
+    category_id: int | None = Form(None, gt=0),
     equipment_type: str = Form(""),
     sector: str = Form(""),
     location: str = Form(""),
@@ -378,6 +427,9 @@ async def update_equipment(
         if 'unit_id' in await request.form():
             validate_equipment_unit(db, unit_id, item.company_id)
             item.unit_id = unit_id
+        if 'category_id' in await request.form():
+            validate_equipment_category(db, category_id, item.company_id)
+            item.category_id = category_id
 
         tag = tag.strip().upper()
         duplicated = equipment_query(db, _auth).filter(
