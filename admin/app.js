@@ -542,13 +542,15 @@ function categoryOptions(selected = '') {
 
 function categoryManagerHtml() {
   if (!state.categories.length && !canManageUnits()) return '';
-  const node = (c, depth = 0) => { const open = state.expandedCategories.has(c.id); const children = (c.children || []).map(child => node(child, depth + 1)).join(''); return `<div class="category-node" style="padding-left:${depth * 14}px"><button type="button" class="outline-button" data-category-expand="${c.id}" aria-expanded="${open}">${children ? (open ? '▾' : '▸') : '•'}</button><button type="button" class="outline-button" data-category-id="${c.id}">${escapeHtml(c.name)} (${c.asset_count || 0})</button>${canManageUnits() ? `<button type="button" class="outline-button" data-category-sub="${c.id}">+ Subcategoria</button><button type="button" class="outline-button" data-category-edit="${c.id}">Editar</button><button type="button" class="outline-button" data-category-active="${c.id}" data-active="${!c.active}">${c.active ? 'Desativar' : 'Ativar'}</button>` : ''}${open ? `<div class="category-children">${children}</div>` : ''}</div>`; };
-  const form = canManageUnits() ? `<form id="categoryForm" class="inline-actions"><input id="categoryNameInput" class="input" placeholder="Nome da categoria" required maxlength="200"/><select id="categoryParentInput" class="input"><option value="">Nenhuma — categoria raiz</option>${categoryOptions('')}</select><button class="primary-button" type="submit">Salvar categoria</button><button id="cancelCategoryForm" class="outline-button" type="button">Cancelar</button></form>` : '';
-  return `<div class="card panel asset-manager"><div class="inline-actions" style="justify-content:space-between"><h3>Gerenciador de ativos</h3>${canManageUnits() ? '<button id="newCategoryButton" class="primary-button" type="button">+ Categoria</button><button id="newSubcategoryButton" class="secondary-button" type="button">+ Subcategoria</button>' : ''}</div>${form}
-    <div class="asset-manager-grid"><div><label>Categoria</label><select id="categoryFilter" class="input"><option value="">Todas as categorias</option>${categoryOptions(state.selectedCategoryId)}</select><div class="category-tree"><button type="button" class="outline-button" data-all-categories="true">TODOS OS ATIVOS</button>${state.categoryTree.map(c => node(c)).join('')}</div></div>
-    <div><p class="subtle">Selecione uma categoria para mostrar ativos do ramo. Categorias existentes sem vínculo mantêm os equipamentos em “Todas as categorias”.</p><div id="categoryFeedback"></div></div></div></div>`;
+  const node = (c, depth = 0) => {
+    const open = state.expandedCategories.has(c.id);
+    const children = (c.children || []).map(child => node(child, depth + 1)).join('');
+    return `<div class="category-node" style="--depth:${depth}"><button type="button" class="tree-toggle" data-category-expand="${c.id}" aria-expanded="${open}">${children ? (open ? '▾' : '▸') : '·'}</button><button type="button" class="category-name ${String(state.selectedCategoryId) === String(c.id) ? 'selected' : ''}" data-category-id="${c.id}">${escapeHtml(c.name)} <span>(${c.asset_count || 0})</span></button>${canManageUnits() ? `<details class="category-actions"><summary aria-label="Ações">⋮</summary><div class="category-menu"><button type="button" data-category-sub="${c.id}">Nova subcategoria</button><button type="button" data-category-edit="${c.id}">Editar</button><button type="button" data-category-active="${c.id}" data-active="${!c.active}">${c.active ? 'Desativar' : 'Ativar'}</button><button type="button" data-category-delete="${c.id}">Excluir</button></div></details>` : ''}${open && children ? `<div class="category-children">${children}</div>` : ''}</div>`;
+  };
+  const form = canManageUnits() ? `<div id="categoryModal" class="category-modal" hidden><form id="categoryForm" class="compact-form"><label>Nome<input id="categoryNameInput" class="input" required maxlength="200"/></label><label>Categoria pai<select id="categoryParentInput" class="input"><option value="">Nenhuma — categoria raiz</option>${categoryOptions('')}</select></label><div class="inline-actions"><button class="primary-button compact-button" type="submit">Salvar</button><button id="cancelCategoryForm" class="outline-button compact-button" type="button">Cancelar</button></div></form></div>` : '';
+  return `<div class="card panel asset-manager"><div class="inline-actions compact-heading" style="justify-content:space-between"><h3>Gerenciador de ativos</h3>${canManageUnits() ? '<button id="newCategoryButton" class="primary-button compact-button" type="button">+ Categoria</button>' : ''}</div>${form}
+    <div class="asset-manager-grid"><div class="category-column"><div class="category-tree"><button type="button" class="category-name all-assets ${!state.selectedCategoryId ? 'selected' : ''}" data-all-categories="true">TODOS OS ATIVOS</button>${state.categoryTree.map(c => node(c)).join('')}</div></div><div class="asset-content-column"><div class="compact-category-filter"><label for="categoryFilter">Categoria</label><select id="categoryFilter" class="input"><option value="">Todos os ativos</option>${categoryOptions(state.selectedCategoryId)}</select></div><div><p class="subtle">Selecione uma categoria para mostrar ativos do ramo.</p><div id="categoryFeedback"></div></div></div></div></div>`;
 }
-
 async function loadUnits() {
   const response = await fetchWithTimeout(buildUrl(CONFIG.API_BASE_URL, '/units'), {
     headers: getAuthHeaders({ Accept: 'application/json' })
@@ -1091,16 +1093,8 @@ function bindEvents() {
     renderApp();
   }));
   document.querySelector('[data-all-categories]')?.addEventListener('click', async () => { state.selectedCategoryId = ''; await loadItems(); renderApp(); });
-  document.getElementById('newCategoryButton')?.addEventListener('click', async () => {
-    const name = window.prompt('Nome da categoria');
-    if (!name || !name.trim()) return;
-    const response = await fetchWithTimeout(buildUrl(CONFIG.API_BASE_URL, '/asset-categories'), {
-      method: 'POST', headers: getAuthHeaders({'Content-Type': 'application/json'}),
-      body: JSON.stringify({name: name.trim()})
-    });
-    if (!response.ok) { const feedback = document.getElementById('categoryFeedback'); if (feedback) feedback.textContent = 'Não foi possível criar a categoria.'; return; }
-    await loadCategories(); renderApp();
-  });
+  const showCategoryModal = parentId => { const modal = document.getElementById('categoryModal'); if (!modal) return; modal.hidden = false; const parent = document.getElementById('categoryParentInput'); if (parent) parent.value = String(parentId || ''); document.getElementById('categoryNameInput')?.focus(); };
+  document.getElementById('newCategoryButton')?.addEventListener('click', () => showCategoryModal(''));
   document.querySelectorAll('[data-category-edit]').forEach(button => button.addEventListener('click', async () => {
     const category = state.categories.find(item => String(item.id) === button.dataset.categoryEdit);
     const name = window.prompt('Nome da categoria', category?.name || '');
@@ -1132,7 +1126,16 @@ function bindEvents() {
       method: 'PATCH', headers: getAuthHeaders({'Content-Type': 'application/json'}), body: JSON.stringify({active: button.dataset.active === 'true'})
     });
     if (response.ok) { await loadCategories(); renderApp(); }
+  }));  document.querySelectorAll('[data-category-sub]').forEach(button => button.addEventListener('click', () => showCategoryModal(button.dataset.categorySub)));
+  document.querySelectorAll('[data-category-delete]').forEach(button => button.addEventListener('click', async () => {
+    const category = state.categories.find(item => String(item.id) === button.dataset.categoryDelete);
+    if (!category || !window.confirm("Excluir a categoria '" + category.name + "'?")) return;
+    const response = await fetchWithTimeout(buildUrl(CONFIG.API_BASE_URL, '/asset-categories/' + button.dataset.categoryDelete), { method: 'DELETE', headers: getAuthHeaders() });
+    if (!response.ok) { const body = await response.json().catch(() => ({})); const feedback = document.getElementById('categoryFeedback'); if (feedback) feedback.textContent = body.detail || 'Não foi possível excluir a categoria.'; return; }
+    if (String(state.selectedCategoryId) === button.dataset.categoryDelete) state.selectedCategoryId = '';
+    await loadCategories(); await loadItems(); renderApp();
   }));
+
 
   document.getElementById('photoInput')?.addEventListener('change', (event) => {
     updateCreateFormState();
