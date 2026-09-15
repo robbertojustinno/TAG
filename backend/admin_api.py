@@ -339,6 +339,30 @@ def build_router(auth):
         with auth.sessions() as db:
             return [user_json(u) for u in db.scalars(select(User).order_by(User.id))]
 
+    @router.get('/superadmin/company-users')
+    def company_users(_=Depends(auth.superadmin)):
+        """List every company and its user memberships without exposing credentials."""
+        with auth.sessions() as db:
+            companies = list(db.scalars(select(Company).order_by(Company.name, Company.id)))
+            rows = db.execute(
+                select(UserCompany, User)
+                .join(User, User.id == UserCompany.user_id)
+                .order_by(UserCompany.company_id, User.name, User.id)
+            ).all()
+            grouped = {company.id: [] for company in companies}
+            for link, user in rows:
+                grouped.setdefault(link.company_id, []).append({
+                    'id': user.id,
+                    'name': user.name,
+                    'email': user.email,
+                    'active': user.active,
+                    'is_superadmin': user.is_superadmin,
+                    'role': link.role,
+                    'membership_active': link.active,
+                })
+            return [{**company_json(company), 'users': grouped[company.id]}
+                    for company in companies]
+
     @router.post('/users', status_code=201)
     def create_user(payload: NewUser, _=Depends(auth.superadmin)):
         with auth.sessions() as db:

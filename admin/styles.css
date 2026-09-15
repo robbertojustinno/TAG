@@ -781,6 +781,11 @@ textarea {
 
 /* Super Admin tables stay readable without forcing the page to scroll sideways. */
 .superadmin-grid { min-width: 0; }
+.company-user-list { display: grid; gap: 12px; }
+.company-user-card { padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: rgba(255,255,255,0.025); }
+.company-user-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+.company-user-heading small { color: var(--muted); }
+.company-user-card table { min-width: 760px; }
 #superadminPanel .table-wrap { overflow: visible; max-width: 100%; }
 #superadminPanel table { width: 100%; min-width: 0; table-layout: fixed; }
 #superadminPanel th, #superadminPanel td { overflow-wrap: anywhere; vertical-align: middle; }
