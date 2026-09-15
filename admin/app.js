@@ -183,6 +183,8 @@ const state = {
   units: [],
   selectedUnitId: '',
   categories: [],
+  categoryTree: [],
+  expandedCategories: new Set(),
   selectedCategoryId: '',
   apiReachable: null,
   createPreviewUrl: '',
@@ -514,11 +516,14 @@ async function loadItems() {
 }
 
 async function loadCategories() {
-  const response = await fetchWithTimeout(buildUrl(CONFIG.API_BASE_URL, '/asset-categories'), {
+  const response = await fetchWithTimeout(buildUrl(CONFIG.API_BASE_URL, '/asset-categories/tree'), {
     headers: getAuthHeaders({ Accept: 'application/json' })
   });
   if (!response.ok) throw new Error(t('listError'));
-  state.categories = await response.json();
+  state.categoryTree = await response.json();
+  state.categories = [];
+  const flatten = (nodes, parent = null) => (nodes || []).forEach(node => { state.categories.push({...node, parent_id: parent}); flatten(node.children, node.id); });
+  flatten(state.categoryTree);
   return state.categories;
 }
 
@@ -537,10 +542,10 @@ function categoryOptions(selected = '') {
 
 function categoryManagerHtml() {
   if (!state.categories.length && !canManageUnits()) return '';
-  const byParent = new Map(); state.categories.forEach(c => byParent.set(c.parent_id || 0, [...(byParent.get(c.parent_id || 0) || []), c]));
-  const node = (parent, depth = 0) => (byParent.get(parent) || []).map(c => `<div class="category-node" style="padding-left:${depth * 14}px"><button type="button" class="outline-button" data-category-id="${c.id}">${escapeHtml(c.name)} (${c.asset_count || 0})</button>${canManageUnits() ? `<button type="button" class="outline-button" data-category-edit="${c.id}">Editar</button><button type="button" class="outline-button" data-category-active="${c.id}" data-active="${!c.active}">${c.active ? 'Desativar' : 'Ativar'}</button>` : ''}${node(c.id, depth + 1)}</div>`).join('');
-  return `<div class="card panel asset-manager"><div class="inline-actions" style="justify-content:space-between"><h3>Gerenciador de ativos</h3>${canManageUnits() ? '<button id="newCategoryButton" class="primary-button" type="button">+ Nova categoria</button>' : ''}</div>
-    <div class="asset-manager-grid"><div><label>Categoria</label><select id="categoryFilter" class="input"><option value="">Todas as categorias</option>${categoryOptions(state.selectedCategoryId)}</select><div class="category-tree">${node(0)}</div></div>
+  const node = (c, depth = 0) => { const open = state.expandedCategories.has(c.id); const children = (c.children || []).map(child => node(child, depth + 1)).join(''); return `<div class="category-node" style="padding-left:${depth * 14}px"><button type="button" class="outline-button" data-category-expand="${c.id}" aria-expanded="${open}">${children ? (open ? '▾' : '▸') : '•'}</button><button type="button" class="outline-button" data-category-id="${c.id}">${escapeHtml(c.name)} (${c.asset_count || 0})</button>${canManageUnits() ? `<button type="button" class="outline-button" data-category-sub="${c.id}">+ Subcategoria</button><button type="button" class="outline-button" data-category-edit="${c.id}">Editar</button><button type="button" class="outline-button" data-category-active="${c.id}" data-active="${!c.active}">${c.active ? 'Desativar' : 'Ativar'}</button>` : ''}${open ? `<div class="category-children">${children}</div>` : ''}</div>`; };
+  const form = canManageUnits() ? `<form id="categoryForm" class="inline-actions"><input id="categoryNameInput" class="input" placeholder="Nome da categoria" required maxlength="200"/><select id="categoryParentInput" class="input"><option value="">Nenhuma — categoria raiz</option>${categoryOptions('')}</select><button class="primary-button" type="submit">Salvar categoria</button><button id="cancelCategoryForm" class="outline-button" type="button">Cancelar</button></form>` : '';
+  return `<div class="card panel asset-manager"><div class="inline-actions" style="justify-content:space-between"><h3>Gerenciador de ativos</h3>${canManageUnits() ? '<button id="newCategoryButton" class="primary-button" type="button">+ Categoria</button><button id="newSubcategoryButton" class="secondary-button" type="button">+ Subcategoria</button>' : ''}</div>${form}
+    <div class="asset-manager-grid"><div><label>Categoria</label><select id="categoryFilter" class="input"><option value="">Todas as categorias</option>${categoryOptions(state.selectedCategoryId)}</select><div class="category-tree"><button type="button" class="outline-button" data-all-categories="true">TODOS OS ATIVOS</button>${state.categoryTree.map(c => node(c)).join('')}</div></div>
     <div><p class="subtle">Selecione uma categoria para mostrar ativos do ramo. Categorias existentes sem vínculo mantêm os equipamentos em “Todas as categorias”.</p><div id="categoryFeedback"></div></div></div></div>`;
 }
 
@@ -940,7 +945,7 @@ function renderApp(notice = '') {
       <div class="card panel">
         <div class="inline-actions" style="justify-content: space-between; align-items: center;">
   <h3>${t('listTitle')}</h3>
-  <button id="pdfButton" class="primary-button" type="button">Gerar PDF QR</button>
+  <div class="inline-actions"><button id="reportPdfButton" class="primary-button" type="button">GERAR PDF</button><button id="pdfButton" class="outline-button" type="button">Gerar PDF QR</button></div>
 </div>
         <div class="table-wrap">
           <table>
@@ -1080,6 +1085,12 @@ function bindEvents() {
     await loadItems();
     renderApp();
   }));
+  document.querySelectorAll('[data-category-expand]').forEach(button => button.addEventListener('click', () => {
+    const id = Number(button.dataset.categoryExpand);
+    if (state.expandedCategories.has(id)) state.expandedCategories.delete(id); else state.expandedCategories.add(id);
+    renderApp();
+  }));
+  document.querySelector('[data-all-categories]')?.addEventListener('click', async () => { state.selectedCategoryId = ''; await loadItems(); renderApp(); });
   document.getElementById('newCategoryButton')?.addEventListener('click', async () => {
     const name = window.prompt('Nome da categoria');
     if (!name || !name.trim()) return;
@@ -1094,11 +1105,28 @@ function bindEvents() {
     const category = state.categories.find(item => String(item.id) === button.dataset.categoryEdit);
     const name = window.prompt('Nome da categoria', category?.name || '');
     if (!name || !name.trim()) return;
+    const parentValue = window.prompt('ID da categoria pai (vazio para raiz)', category?.parent_id || '');
     const response = await fetchWithTimeout(buildUrl(CONFIG.API_BASE_URL, `/asset-categories/${button.dataset.categoryEdit}`), {
-      method: 'PATCH', headers: getAuthHeaders({'Content-Type': 'application/json'}), body: JSON.stringify({name: name.trim()})
+      method: 'PATCH', headers: getAuthHeaders({'Content-Type': 'application/json'}), body: JSON.stringify({name: name.trim(), parent_id: Number(parentValue) || null})
     });
     if (response.ok) { await loadCategories(); renderApp(); }
   }));
+  document.getElementById('newSubcategoryButton')?.addEventListener('click', async () => {
+    const parentId = state.selectedCategoryId || null;
+    const name = window.prompt('Nome da subcategoria');
+    if (!name || !name.trim() || !parentId) return;
+    const response = await fetchWithTimeout(buildUrl(CONFIG.API_BASE_URL, '/asset-categories'), { method: 'POST', headers: getAuthHeaders({'Content-Type': 'application/json'}), body: JSON.stringify({name: name.trim(), parent_id: Number(parentId)}) });
+    if (response.ok) { await loadCategories(); renderApp(); }
+  });
+  document.getElementById('categoryForm')?.addEventListener('submit', async event => {
+    event.preventDefault();
+    const name = document.getElementById('categoryNameInput')?.value.trim();
+    if (!name) return;
+    const parent_id = Number(document.getElementById('categoryParentInput')?.value) || null;
+    const response = await fetchWithTimeout(buildUrl(CONFIG.API_BASE_URL, '/asset-categories'), { method: 'POST', headers: getAuthHeaders({'Content-Type': 'application/json'}), body: JSON.stringify({name, parent_id}) });
+    if (response.ok) { await loadCategories(); renderApp(); }
+  });
+  document.getElementById('cancelCategoryForm')?.addEventListener('click', () => renderApp());
   document.querySelectorAll('[data-category-active]').forEach(button => button.addEventListener('click', async () => {
     const response = await fetchWithTimeout(buildUrl(CONFIG.API_BASE_URL, `/asset-categories/${button.dataset.categoryActive}`), {
       method: 'PATCH', headers: getAuthHeaders({'Content-Type': 'application/json'}), body: JSON.stringify({active: button.dataset.active === 'true'})
@@ -1548,6 +1576,21 @@ async function openEquipmentPdf() {
     tab.close();
     const feedback = document.getElementById('searchFeedback');
     if (feedback) feedback.textContent = error.message;
+  }
+}
+
+async function openConsolidatedReportPdf() {
+  try {
+    const response = await fetchWithTimeout(`${CONFIG.API_BASE_URL}/equipment/report-pdf`, {
+      method: 'POST', headers: getAuthHeaders({'Content-Type': 'application/json', Accept: 'application/pdf'}),
+      body: JSON.stringify({category_id: state.selectedCategoryId ? Number(state.selectedCategoryId) : null, unit_id: state.selectedUnitId ? Number(state.selectedUnitId) : null, search: document.getElementById('searchTagInput')?.value || null})
+    });
+    if (!response.ok) throw new Error('Não foi possível gerar o relatório.');
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob); window.open(url, '_blank', 'noopener');
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch (error) {
+    const feedback = document.getElementById('searchFeedback'); if (feedback) feedback.textContent = error.message;
   }
 }
 

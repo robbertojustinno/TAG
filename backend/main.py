@@ -4,6 +4,8 @@ from fastapi.responses import StreamingResponse
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy import or_
+from pydantic import BaseModel, Field
 import cloudinary
 import cloudinary.uploader
 import os
@@ -16,6 +18,9 @@ from io import BytesIO
 from sqlalchemy.orm import sessionmaker
 
 from reportlab.lib.pagesizes import A4
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image as ReportImage
 from reportlab.lib.units import mm
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
@@ -317,7 +322,7 @@ async def create_equipment(
 
 
 @app.get("/equipment")
-def list_equipment(unit_id: int | None = Query(None, gt=0), category_id: int | None = Query(None, gt=0), include_children: bool = Query(False), _auth: CompanyContext = Depends(auth.read_context)):
+def list_equipment(unit_id: int | None = Query(None, gt=0), category_id: int | None = Query(None, gt=0), include_children: bool = Query(False), status: str | None = Query(None), search: str | None = Query(None), _auth: CompanyContext = Depends(auth.read_context)):
     db = SessionLocal()
     try:
         if unit_id is not None:
@@ -343,6 +348,12 @@ def list_equipment(unit_id: int | None = Query(None, gt=0), category_id: int | N
             query = query.filter(Equipment.unit_id == unit_id)
         if category_ids is not None:
             query = query.filter(Equipment.category_id.in_(category_ids))
+        if status and status.strip():
+            query = query.filter(Equipment.status == status.strip())
+        if search and search.strip():
+            term = f"%{search.strip()}%"
+            query = query.filter(or_(Equipment.tag.ilike(term), Equipment.name.ilike(term),
+                                     Equipment.manufacturer.ilike(term), Equipment.model.ilike(term)))
         items = query.order_by(Equipment.id.desc()).all()
         return [serialize_equipment(i) for i in items]
     finally:
@@ -579,6 +590,99 @@ def equipment_pdf_labels(_auth: CompanyContext):
             headers={"Content-Disposition": "inline; filename=etiquetas_qr.pdf"},
         )
          
+    finally:
+        db.close()
+
+
+class EquipmentReportPayload(BaseModel):
+    category_id: int | None = Field(default=None, gt=0)
+    unit_id: int | None = Field(default=None, gt=0)
+    status: str | None = Field(default=None, max_length=100)
+    search: str | None = Field(default=None, max_length=200)
+
+class _ReportCanvas(canvas.Canvas):
+    def __init__(self, *args, **kwargs):
+        canvas.Canvas.__init__(self, *args, **kwargs); self._states = []
+    def showPage(self):
+        self._states.append(dict(self.__dict__)); self._startPage()
+    def save(self):
+        total = len(self._states)
+        for state in self._states:
+            self.__dict__.update(state); self.saveState(); self.setFont('Helvetica', 7); self.setFillColor(colors.grey)
+            self.drawCentredString(A4[0]/2, 7*mm, f'Página {self._pageNumber} de {total}'); self.restoreState(); canvas.Canvas.showPage(self)
+        canvas.Canvas.save(self)
+
+
+@app.post("/equipment/report-pdf", response_class=StreamingResponse)
+def equipment_report_pdf(payload: EquipmentReportPayload, _auth: CompanyContext = Depends(auth.read_context)):
+    db = SessionLocal()
+    try:
+        category_ids = None
+        category_title = None
+        if payload.category_id is not None:
+            root = db.query(AssetCategory).filter(AssetCategory.id == payload.category_id,
+                                                   AssetCategory.company_id == _auth.company_id).first()
+            if not root:
+                raise HTTPException(status_code=404, detail="Category not found in the active company")
+            category_ids = [root.id]
+            pending = [root.id]
+            while pending:
+                child_ids = [row.id for row in db.query(AssetCategory.id).filter(
+                    AssetCategory.parent_id.in_(pending), AssetCategory.company_id == _auth.company_id)]
+                category_ids.extend(child_ids)
+                pending = child_ids
+            path = []
+            current = root
+            while current is not None:
+                path.append(current.name)
+                current = current.parent
+            category_title = " > ".join(reversed(path))
+
+        query = equipment_query(db, _auth)
+        if category_ids is not None:
+            query = query.filter(Equipment.category_id.in_(category_ids))
+        if payload.unit_id is not None:
+            validate_equipment_unit(db, payload.unit_id, _auth.company_id)
+            query = query.filter(Equipment.unit_id == payload.unit_id)
+        if payload.status and payload.status.strip():
+            query = query.filter(Equipment.status == payload.status.strip())
+        if payload.search and payload.search.strip():
+            term = f"%{payload.search.strip()}%"
+            query = query.filter(or_(Equipment.tag.ilike(term), Equipment.name.ilike(term),
+                                     Equipment.manufacturer.ilike(term), Equipment.model.ilike(term)))
+        items = query.order_by(Equipment.tag.asc(), Equipment.id.asc()).all()
+        if not items:
+            raise HTTPException(status_code=404, detail="Nenhum equipamento encontrado para o relatório")
+
+        company = db.get(Company, _auth.company_id)
+        buffer = BytesIO()
+        styles = getSampleStyleSheet()
+        normal = styles['Normal']; normal.fontName = 'Helvetica'; normal.fontSize = 8
+        title_style = styles['Title']; title_style.fontName = 'Helvetica-Bold'; title_style.fontSize = 16
+        story = [Paragraph('TAGCHECK', title_style), Paragraph(company.name, styles['Heading2'])]
+        if getattr(company, 'logo_data', None):
+            logo = ReportImage(BytesIO(company.logo_data), width=32*mm, height=12*mm, kind='proportional')
+            story.insert(0, logo)
+        report_title = 'RELATÓRIO GERAL DE ATIVOS' if not category_title else f'RELATÓRIO DE ATIVOS — {category_title}'
+        story.extend([Spacer(1, 4*mm), Paragraph(report_title, styles['Heading2']),
+                      Paragraph(f"Emissão: {time.strftime('%d/%m/%Y %H:%M:%S')}  |  Quantidade: {len(items)}", normal), Spacer(1, 4*mm)])
+        headers = ['TAG', 'NOME', 'CATEGORIA', 'UNIDADE', 'TIPO', 'FABRICANTE', 'MODELO', 'STATUS']
+        data = [headers]
+        for item in items:
+            data.append([item.tag or '-', item.name or '-', ' > '.join(serialize_equipment(item)['category_path']) or 'Sem categoria',
+                         item.unit.name if item.unit else '-', item.equipment_type or '-', item.manufacturer or '-',
+                         item.model or '-', item.status or 'Ativo'])
+        table = Table(data, repeatRows=1, colWidths=[19*mm, 28*mm, 36*mm, 24*mm, 22*mm, 27*mm, 25*mm, 18*mm])
+        table.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1f2937')), ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+                                   ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'), ('FONTSIZE', (0,0), (-1,-1), 7),
+                                   ('GRID', (0,0), (-1,-1), 0.25, colors.HexColor('#9ca3af')), ('VALIGN', (0,0), (-1,-1), 'TOP'),
+                                   ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor('#f3f4f6')])]))
+        story.append(table)
+        doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=8*mm, leftMargin=8*mm, topMargin=12*mm, bottomMargin=14*mm,
+                                title='TagCheck — Relatório de Ativos')
+        doc.build(story, canvasmaker=_ReportCanvas)
+        buffer.seek(0)
+        return StreamingResponse(buffer, media_type='application/pdf', headers={'Content-Disposition': 'attachment; filename=relatorio_ativos.pdf'})
     finally:
         db.close()
 

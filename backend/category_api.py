@@ -109,7 +109,11 @@ def build_category_router(auth):
             for row in rows:
                 by_parent.setdefault(row.parent_id, []).append(row)
             def branch(parent_id):
-                return [category_json(row, counts.get(row.id, 0), branch(row.id)) for row in by_parent.get(parent_id, [])]
+                result = []
+                for row in by_parent.get(parent_id, []):
+                    children = branch(row.id)
+                    result.append(category_json(row, counts.get(row.id, 0) + sum(child['asset_count'] for child in children), children))
+                return result
             return branch(None)
 
     @router.post('/asset-categories', status_code=201)
