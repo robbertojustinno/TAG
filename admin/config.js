@@ -11,10 +11,10 @@ window.TAGCHECK_ADMIN_CONFIG = {
     authUser: 'tagcheck_admin_auth_user'
   },
   ENDPOINTS: {
-    login: '/auth/login',
-    list: '/equipment',
-    create: '/equipment',
-    byTag: '/equipment/tag/:tag',
-    health: '/health'
-  }
+  login: '/auth/login',
+  list: '/api/equipment',
+  create: '/api/equipment',
+  byTag: '/api/equipment/tag/:tag',
+  health: '/health'
+}
 };

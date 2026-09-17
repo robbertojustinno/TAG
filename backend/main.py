@@ -1,4 +1,4 @@
-﻿from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Depends
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -379,7 +379,9 @@ def delete_equipment(
     finally:
         db.close()
 
-@app.get("/equipment/pdf")
+from fastapi.responses import StreamingResponse
+
+@app.get("/equipment/pdf", response_class=StreamingResponse)
 def equipment_pdf_labels():
     db = SessionLocal()
     try:
@@ -402,7 +404,7 @@ def equipment_pdf_labels():
         label_width = (page_width - (2 * margin_x) - ((cols - 1) * gap_x)) / cols
         label_height = (page_height - (2 * margin_y) - ((rows - 1) * gap_y)) / rows
 
-        qr_size = min(label_width * 0.75, label_height * 0.70)
+        qr_size = min(label_width * 0.75, label_height * 0.70)(label_width * 0.62, label_height * 0.58)
 
         for index, item in enumerate(items):
             page_index = index % (cols * rows)
