@@ -48,6 +48,7 @@ CLOUDINARY_API_SECRET = required_env("CLOUDINARY_API_SECRET")
 SESSION_TTL_SECONDS = 8 * 60 * 60
 
 if __package__:
+    from .metrology import metrology_form, apply_metrology, serialize_metrology, LABELS as METROLOGY_LABELS
     from .models import Base, Company, Unit, User, UserCompany, Equipment, AssetCategory, DEFAULT_COMPANY_SLUG
     from .migrate_multiempresa import make_engine, migrate
     from .tenancy import Tenancy, CompanyContext, equipment_query
@@ -55,6 +56,7 @@ if __package__:
     from .company_api import build_company_router
     from .category_api import build_category_router
 else:
+    from metrology import metrology_form, apply_metrology, serialize_metrology, LABELS as METROLOGY_LABELS
     from models import Base, Company, Unit, User, UserCompany, Equipment, AssetCategory, DEFAULT_COMPANY_SLUG
     from migrate_multiempresa import make_engine, migrate
     from tenancy import Tenancy, CompanyContext, equipment_query
@@ -210,6 +212,7 @@ def serialize_equipment(item: Equipment) -> dict:
         "next_calibration_date": item.next_calibration_date or "",
         "status": item.status or "Ativo",
         "notes": item.notes or "",
+        **serialize_metrology(item),
         "qr_payload": build_qr_payload(item),
     }
     
@@ -258,6 +261,7 @@ async def create_equipment(
     next_calibration_date: str = Form(""),
     status: str = Form("Ativo"),
     notes: str = Form(""),
+    metrology: dict = Depends(metrology_form),
     _auth: CompanyContext = Depends(auth.writer),
 ):
     tag = tag.strip().upper()
@@ -276,6 +280,7 @@ async def create_equipment(
         if existing:
             raise HTTPException(status_code=400, detail="TAG jÃ¡ cadastrada.")
 
+        apply_metrology(Equipment(), metrology)
         result = cloudinary.uploader.upload(
             photo.file,
             folder="tagcheck/equipments" if _auth.company_id == DEFAULT_COMPANY_ID else f"tagcheck/companies/{_auth.company_id}/equipments",
@@ -303,6 +308,7 @@ async def create_equipment(
             status=status.strip() or "Ativo",
             notes=notes.strip(),
         )
+        apply_metrology(item, metrology)
         db.add(item)
         db.commit()
         db.refresh(item)
@@ -426,6 +432,7 @@ async def update_equipment(
     next_calibration_date: str = Form(""),
     status: str = Form("Ativo"),
     notes: str = Form(""),
+    metrology: dict = Depends(metrology_form),
     _auth: CompanyContext = Depends(auth.writer),
 ):
     db = SessionLocal()
@@ -450,6 +457,7 @@ async def update_equipment(
         if duplicated:
             raise HTTPException(status_code=400, detail="TAG jÃ¡ cadastrada em outro equipamento.")
 
+        apply_metrology(item, metrology)
         item.tag = tag
         item.name = name.strip()
         item.equipment_type = equipment_type.strip()
@@ -595,6 +603,7 @@ def equipment_pdf_labels(_auth: CompanyContext):
 
 
 class EquipmentReportPayload(BaseModel):
+    equipment_id: int | None = Field(default=None, gt=0)
     category_id: int | None = Field(default=None, gt=0)
     unit_id: int | None = Field(default=None, gt=0)
     status: str | None = Field(default=None, max_length=100)
@@ -639,6 +648,8 @@ def equipment_report_pdf(payload: EquipmentReportPayload, _auth: CompanyContext 
             category_title = " > ".join(reversed(path))
 
         query = equipment_query(db, _auth)
+        if payload.equipment_id is not None:
+            query = query.filter(Equipment.id == payload.equipment_id)
         if category_ids is not None:
             query = query.filter(Equipment.category_id.in_(category_ids))
         if payload.unit_id is not None:
@@ -663,7 +674,7 @@ def equipment_report_pdf(payload: EquipmentReportPayload, _auth: CompanyContext 
         if getattr(company, 'logo_data', None):
             logo = ReportImage(BytesIO(company.logo_data), width=32*mm, height=12*mm, kind='proportional')
             story.insert(0, logo)
-        report_title = 'RELATÓRIO GERAL DE ATIVOS' if not category_title else f'RELATÓRIO DE ATIVOS — {category_title}'
+        report_title = 'FICHA DO ATIVO' if payload.equipment_id is not None else ('RELATÓRIO GERAL DE ATIVOS' if not category_title else f'RELATÓRIO DE ATIVOS — {category_title}')
         story.extend([Spacer(1, 4*mm), Paragraph(report_title, styles['Heading2']),
                       Paragraph(f"Emissão: {time.strftime('%d/%m/%Y %H:%M:%S')}  |  Quantidade: {len(items)}", normal), Spacer(1, 4*mm)])
         headers = ['TAG', 'NOME', 'CATEGORIA', 'UNIDADE', 'TIPO', 'FABRICANTE', 'MODELO', 'STATUS']
@@ -678,6 +689,16 @@ def equipment_report_pdf(payload: EquipmentReportPayload, _auth: CompanyContext 
                                    ('GRID', (0,0), (-1,-1), 0.25, colors.HexColor('#9ca3af')), ('VALIGN', (0,0), (-1,-1), 'TOP'),
                                    ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor('#f3f4f6')])]))
         story.append(table)
+        from xml.sax.saxutils import escape
+        for item in items:
+            story.extend([Spacer(1, 5*mm), Paragraph(escape(f'{item.tag} — {item.name}'), styles['Heading3']),
+                          Paragraph('Dados Metrológicos', styles['Heading4'])])
+            values = serialize_metrology(item)
+            rows = [[Paragraph(escape(label), normal), Paragraph(escape((format(values[key], '.10f').rstrip('0').rstrip('.').replace('.', ',') if isinstance(values[key], float) else str(values[key])) if values[key] is not None else 'Não informado'), normal)]
+                    for key, label in METROLOGY_LABELS.items()]
+            details = Table(rows, colWidths=[80*mm, 119*mm])
+            details.setStyle(TableStyle([('GRID', (0,0), (-1,-1), .25, colors.lightgrey), ('VALIGN', (0,0), (-1,-1), 'TOP')]))
+            story.append(details)
         doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=8*mm, leftMargin=8*mm, topMargin=12*mm, bottomMargin=14*mm,
                                 title='TagCheck — Relatório de Ativos')
         doc.build(story, canvasmaker=_ReportCanvas)
@@ -685,6 +706,11 @@ def equipment_report_pdf(payload: EquipmentReportPayload, _auth: CompanyContext 
         return StreamingResponse(buffer, media_type='application/pdf', headers={'Content-Disposition': 'attachment; filename=relatorio_ativos.pdf'})
     finally:
         db.close()
+
+
+@app.get("/equipment/{id}/report-pdf", response_class=StreamingResponse)
+def asset_report_pdf(id: int, _auth: CompanyContext = Depends(auth.read_context)):
+    return equipment_report_pdf(EquipmentReportPayload(equipment_id=id), _auth)
 
 
 @app.post("/equipment/pdf-access")

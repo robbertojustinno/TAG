@@ -3,9 +3,11 @@ import os
 from sqlalchemy import create_engine, event, inspect, select, text
 from sqlalchemy.orm import Session
 if __package__:
+    from .migrate_metrology import migrate_metrology
     from .models import Base, Company, Unit, User, UserCompany, Equipment, AssetCategory, DEFAULT_COMPANY_SLUG
     from .passwords import hash_password, verify_password
 else:
+    from migrate_metrology import migrate_metrology
     from models import Base, Company, Unit, User, UserCompany, Equipment, AssetCategory, DEFAULT_COMPANY_SLUG
     from passwords import hash_password, verify_password
 
@@ -128,6 +130,7 @@ def migrate(engine, username, password, email):
             for name in ('equipment_type', 'sector', 'location', 'manufacturer', 'model', 'serial_number', 'calibration_date', 'next_calibration_date', 'status', 'notes'):
                 if name not in columns:
                     connection.execute(text(f'ALTER TABLE tagcheck_equipment ADD COLUMN "{name}" TEXT'))
+        migrate_metrology(connection)
         reassigned = connection.execute(text('UPDATE tagcheck_equipment SET company_id=:company WHERE company_id IS NULL'), {'company': company_id}).rowcount
         orphaned = connection.execute(text('SELECT COUNT(*) FROM tagcheck_equipment e LEFT JOIN companies c ON e.company_id=c.id WHERE c.id IS NULL')).scalar_one()
         if orphaned:

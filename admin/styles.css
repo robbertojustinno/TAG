@@ -845,3 +845,10 @@ select option {
 .compact-button { padding: 6px 10px; font-size: .85rem; }
 .asset-content-column { min-width: 0; }
 @media (max-width: 800px) { .asset-manager-grid { grid-template-columns: 1fr; } }
+
+.metrology-block { margin: 12px 0; padding: 12px; border: 1px solid #64748b; border-radius: 10px; min-width: 0; }
+.metrology-block legend { font-weight: 700; padding: 0 6px; }
+.metrology-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; margin-bottom: 10px; }
+.metrology-grid label { display: flex; flex-direction: column; gap: 4px; font-size: .85rem; min-width: 0; }
+.metrology-grid .input { width: 100%; min-width: 0; box-sizing: border-box; }
+.metrology-block small { display: block; margin-top: 6px; }

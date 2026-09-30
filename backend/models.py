@@ -1,7 +1,7 @@
 """Database models. Importing this module never opens or migrates a database."""
 from datetime import datetime, timezone
 from sqlalchemy import (Boolean, CheckConstraint, Column, DateTime, ForeignKey,
-                        Integer, String, Text, LargeBinary, UniqueConstraint, select, false)
+                        Integer, String, Text, Numeric, LargeBinary, UniqueConstraint, select, false)
 from sqlalchemy.orm import declarative_base, relationship, deferred
 
 Base = declarative_base()
@@ -105,3 +105,11 @@ class Equipment(Base):
     next_calibration_date = Column(String, nullable=True)
     status = Column(String, nullable=True)
     notes = Column(Text, nullable=True)
+    measurand = Column(String(200), nullable=True)
+    measurement_unit = Column(String(200), nullable=True)
+    range_min = Column(Numeric(24, 10), nullable=True)
+    range_max = Column(Numeric(24, 10), nullable=True)
+    accuracy_class = Column(String(200), nullable=True)
+    resolution = Column(Numeric(24, 10), nullable=True)
+    ema = Column(Numeric(24, 10), nullable=True)
+    reading_contribution = Column(Numeric(24, 10), nullable=True)

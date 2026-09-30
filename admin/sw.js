@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tagcheck-admin-v1-fresh-assets';
+const CACHE_NAME = 'tagcheck-admin-metrology-v1';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(self.skipWaiting());

@@ -1,3 +1,35 @@
+const METROLOGY_FIELDS = [["measurand", "Grandeza"], ["measurement_unit", "Unidade de medição"], ["range_min", "Faixa mínima"], ["range_max", "Faixa máxima"], ["accuracy_class", "Classe"], ["resolution", "Resolução"], ["ema", "EMA"], ["reading_contribution", "Contribuição estimada da leitura"]];
+function metrologyValues(source) {
+  return Object.fromEntries(METROLOGY_FIELDS.map(([key]) => [key, source[key] ?? '']));
+}
+function readMetrology(prefix) {
+  return Object.fromEntries(METROLOGY_FIELDS.map(([key]) => [key, document.getElementById(`${prefix}Metro_${key}`)?.value.trim() ?? '']));
+}
+function metrologyHtml(prefix, values) {
+  return `<fieldset class="metrology-block"><legend>Dados Metrológicos</legend><div class="metrology-grid">
+    ${METROLOGY_FIELDS.map(([key, label]) => `<label>${label}<input id="${prefix}Metro_${key}" class="input" ${['measurand','measurement_unit','accuracy_class'].includes(key) ? '' : 'inputmode="decimal"'} value="${escapeHtml(values[key] ?? '')}" /></label>`).join('')}
+  </div><button type="button" id="${prefix}CalculateEma" class="outline-button">Calcular EMA pela classe (%)</button>
+  <small>EMA = (faixa máxima − faixa mínima) × classe / 100. O valor pode ser informado manualmente.</small>
+  <div id="${prefix}MetroFeedback" role="status"></div></fieldset>`;
+}
+function bindMetrology(prefix) {
+  const save = () => Object.assign(prefix === 'create' ? state.createForm : state.editDraft, readMetrology(prefix));
+  METROLOGY_FIELDS.forEach(([key]) => document.getElementById(`${prefix}Metro_${key}`)?.addEventListener('input', save));
+  document.getElementById(`${prefix}CalculateEma`)?.addEventListener('click', () => {
+    const values = readMetrology(prefix);
+    const number = value => value.trim() === '' ? NaN : Number(value.replace(',', '.').replace(/%$/, '').trim());
+    const low = number(values.range_min), high = number(values.range_max), accuracy = number(values.accuracy_class);
+    const feedback = document.getElementById(`${prefix}MetroFeedback`);
+    if (![low, high, accuracy].every(Number.isFinite) || high < low || accuracy < 0) {
+      feedback.textContent = 'Informe uma faixa válida e a classe percentual.';
+      return;
+    }
+    document.getElementById(`${prefix}Metro_ema`).value = String(Number(((high-low)*accuracy/100).toFixed(10))).replace('.', ',');
+    save();
+    feedback.textContent = 'EMA calculado. Você pode editar o valor manualmente.';
+  });
+}
+
 const CONFIG = window.TAGCHECK_ADMIN_CONFIG;
 const app = document.getElementById('app');
 const openViewerButton = document.getElementById('openViewerButton');
@@ -335,6 +367,7 @@ function canManageUnits() {
 
 function normalizeItem(raw) {
   return {
+    ...metrologyValues(raw),
     id: raw.id ?? null,
     tag: raw.tag ?? '-',
     name: raw.name ?? 'Instrumento',
@@ -714,11 +747,13 @@ function createAdditionalFields(prefix, values) {
       <label>Categoria<select id="${prefix}CategoryInput" class="input"><option value="">Sem categoria</option>${categoryOptions(values.category_id || '')}</select></label>
       <input id="${prefix}NotesInput" class="input" placeholder="${t('notes')}" value="${escapeHtml(values.notes || '')}" />
     </div>
+    ${metrologyHtml(prefix, values)}
   `;
 }
 
 function renderEditableRow(item) {
   const draft = state.editDraft || {
+    ...metrologyValues(item),
     tag: item.tag,
     name: item.name,
     equipment_type: item.equipment_type || '',
@@ -1044,6 +1079,8 @@ function bindLoginEvents() {
 }
 
 function bindEvents() {
+  bindMetrology('create');
+  bindMetrology('edit');
   const changeUnit = async (path, method, data) => {
     if (!canManageUnits()) return;
     try {
@@ -1175,6 +1212,7 @@ function bindEvents() {
     formData.append('equipment_type', state.createForm.equipment_type);
     formData.append('sector', state.createForm.sector);
     formData.append('location', state.createForm.location);
+    METROLOGY_FIELDS.forEach(([key]) => formData.append(key, state.createForm[key] ?? ''));
     formData.append('manufacturer', state.createForm.manufacturer);
     formData.append('model', state.createForm.model);
     formData.append('serial_number', state.createForm.serial_number);
@@ -1317,6 +1355,7 @@ function bindEvents() {
     form.append('equipment_type', state.editDraft.equipment_type || '');
     form.append('sector', state.editDraft.sector || '');
     form.append('location', state.editDraft.location || '');
+    METROLOGY_FIELDS.forEach(([key]) => form.append(key, readMetrology('edit')[key]));
     form.append('manufacturer', state.editDraft.manufacturer || '');
     form.append('model', state.editDraft.model || '');
     form.append('serial_number', state.editDraft.serial_number || '');
@@ -1393,6 +1432,7 @@ window.startEditItem = function(id) {
   state.editingId = id;
   state.deleteTargetId = null;
   state.editDraft = {
+    ...metrologyValues(item),
     tag: item.tag,
     name: item.name,
     equipment_type: item.equipment_type || '',
