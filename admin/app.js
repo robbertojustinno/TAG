@@ -1,4 +1,10 @@
 const METROLOGY_FIELDS = [["measurand", "Grandeza"], ["measurement_unit", "Unidade de medição"], ["range_min", "Faixa mínima"], ["range_max", "Faixa máxima"], ["accuracy_class", "Classe"], ["resolution", "Resolução"], ["ema", "EMA"], ["reading_contribution", "Contribuição estimada da leitura"]];
+const METROLOGY_HINTS = {
+  measurand: 'Ex.: Pressão', measurement_unit: 'Ex.: mmWS',
+  range_min: 'Ex.: 0', range_max: 'Ex.: 630',
+  accuracy_class: 'Ex.: 2,0 (%)', resolution: 'Ex.: 10',
+  ema: 'Ex.: 12,6', reading_contribution: 'Ex.: 5'
+};
 function metrologyValues(source) {
   return Object.fromEntries(METROLOGY_FIELDS.map(([key]) => [key, source[key] ?? '']));
 }
@@ -7,7 +13,7 @@ function readMetrology(prefix) {
 }
 function metrologyHtml(prefix, values) {
   return `<fieldset class="metrology-block"><legend>Dados Metrológicos</legend><div class="metrology-grid">
-    ${METROLOGY_FIELDS.map(([key, label]) => `<label>${label}<input id="${prefix}Metro_${key}" class="input" ${['measurand','measurement_unit','accuracy_class'].includes(key) ? '' : 'inputmode="decimal"'} value="${escapeHtml(values[key] ?? '')}" /></label>`).join('')}
+    ${METROLOGY_FIELDS.map(([key, label]) => `<label>${label}<input id="${prefix}Metro_${key}" class="input" placeholder="${escapeHtml(METROLOGY_HINTS[key])}" ${['measurand','measurement_unit','accuracy_class'].includes(key) ? '' : 'inputmode="decimal"'} value="${escapeHtml(values[key] ?? '')}" /></label>`).join('')}
   </div><button type="button" id="${prefix}CalculateEma" class="outline-button">Calcular EMA pela classe (%)</button>
   <small>EMA = (faixa máxima − faixa mínima) × classe / 100. O valor pode ser informado manualmente.</small>
   <div id="${prefix}MetroFeedback" role="status"></div></fieldset>`;
