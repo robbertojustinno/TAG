@@ -5,6 +5,7 @@ const METROLOGY_HINTS = {
   accuracy_class: 'Ex.: 2,0 (%)', resolution: 'Ex.: 10',
   ema: 'Ex.: 12,6', reading_contribution: 'Ex.: 5'
 };
+const METROLOGY_OPTIONS = {"measurand": ["Pressão", "Pressão diferencial", "Temperatura", "Umidade relativa", "Vazão", "Volume", "Nível", "Massa", "Força", "Torque", "Comprimento", "Deslocamento", "Velocidade", "Rotação", "Tempo", "Frequência", "Tensão elétrica", "Corrente elétrica", "Resistência elétrica", "Potência", "Energia", "Condutividade elétrica", "pH"], "measurement_unit": ["mmWS", "mmH₂O", "cmH₂O", "mH₂O", "mmHg", "inH₂O", "Pa", "kPa", "MPa", "bar", "mbar", "psi", "kgf/cm²", "°C", "°F", "K", "%UR", "%", "L/min", "L/h", "m³/h", "m³/s", "kg/h", "L", "mL", "m³", "mm", "cm", "m", "µm", "g", "kg", "mg", "t", "N", "kN", "N·m", "kgf", "m/s", "km/h", "rpm", "s", "min", "h", "Hz", "kHz", "V", "mV", "A", "mA", "µA", "Ω", "kΩ", "MΩ", "W", "kW", "Wh", "kWh", "µS/cm", "mS/cm", "pH"]};
 function metrologyValues(source) {
   return Object.fromEntries(METROLOGY_FIELDS.map(([key]) => [key, source[key] ?? '']));
 }
@@ -13,8 +14,11 @@ function readMetrology(prefix) {
 }
 function metrologyHtml(prefix, values) {
   return `<fieldset class="metrology-block"><legend>Dados Metrológicos</legend><div class="metrology-grid">
-    ${METROLOGY_FIELDS.map(([key, label]) => `<label>${label}<input id="${prefix}Metro_${key}" class="input" placeholder="${escapeHtml(METROLOGY_HINTS[key])}" ${['measurand','measurement_unit','accuracy_class'].includes(key) ? '' : 'inputmode="decimal"'} value="${escapeHtml(values[key] ?? '')}" /></label>`).join('')}
-  </div><button type="button" id="${prefix}CalculateEma" class="outline-button">Calcular EMA pela classe (%)</button>
+    ${METROLOGY_FIELDS.map(([key, label]) => `<label>${label}<input id="${prefix}Metro_${key}" class="input" ${METROLOGY_OPTIONS[key] ? `list="${prefix}MetroOptions_${key}"` : ''} placeholder="${escapeHtml(METROLOGY_HINTS[key])}" ${['measurand','measurement_unit','accuracy_class'].includes(key) ? '' : 'inputmode="decimal"'} value="${escapeHtml(values[key] ?? '')}" /></label>`).join('')}
+  </div>
+  ${Object.entries(METROLOGY_OPTIONS).map(([key, options]) => `<datalist id="${prefix}MetroOptions_${key}">${options.map(value => `<option value="${escapeHtml(value)}"></option>`).join('')}</datalist>`).join('')}
+  <small>Grandeza e unidade: selecione na lista ou digite um valor personalizado.</small>
+  <button type="button" id="${prefix}CalculateEma" class="outline-button">Calcular EMA pela classe (%)</button>
   <small>EMA = (faixa máxima − faixa mínima) × classe / 100. O valor pode ser informado manualmente.</small>
   <div id="${prefix}MetroFeedback" role="status"></div></fieldset>`;
 }
