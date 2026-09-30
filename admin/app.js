@@ -556,7 +556,7 @@ function createAdditionalFields(prefix, values) {
       <label>Categoria<select id="${prefix}CategoryInput" class="input"><option value="">Sem categoria</option>${categoryOptions(values.category_id)}</select></label>
       <input id="${prefix}NotesInput" class="input" placeholder="${t('notes')}" value="${escapeHtml(values.notes || '')}" />
     </div>
-    ${metrologyHtml(prefix, values)}
+    ${prefix === 'edit' ? metrologyHtml(prefix, values) : ''}
   `;
 }
 
@@ -759,6 +759,7 @@ function renderApp(notice = '') {
           </div>
           ${searchResultHtml()}
         </div>
+        <div class="card panel create-metrology-card">${metrologyHtml('create', state.createForm)}</div>
         ${categoryManagerHtml()}</div>
       </div>
 
