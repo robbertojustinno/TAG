@@ -852,3 +852,7 @@ select option {
 .metrology-grid label { display: flex; flex-direction: column; gap: 4px; font-size: .85rem; min-width: 0; }
 .metrology-grid .input { width: 100%; min-width: 0; box-sizing: border-box; }
 .metrology-block small { display: block; margin-top: 6px; }
+
+.search-category-stack { display: grid; gap: 16px; align-content: start; min-width: 0; }
+.search-category-stack .asset-manager-grid { grid-template-columns: 1fr; }
+.category-children { grid-column: 1 / -1; }

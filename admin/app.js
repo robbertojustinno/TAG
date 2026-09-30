@@ -757,7 +757,7 @@ function createAdditionalFields(prefix, values) {
       <label>Categoria<select id="${prefix}CategoryInput" class="input"><option value="">Sem categoria</option>${categoryOptions(values.category_id || '')}</select></label>
       <input id="${prefix}NotesInput" class="input" placeholder="${t('notes')}" value="${escapeHtml(values.notes || '')}" />
     </div>
-    ${metrologyHtml(prefix, values)}
+    ${prefix === 'edit' ? metrologyHtml(prefix, values) : ''}
   `;
 }
 
@@ -953,7 +953,7 @@ function renderApp(notice = '') {
           <div id="createFeedback">${notice}</div>
         </div>` : ''}
 
-        <div class="card panel">
+        <div class="search-category-stack"><div class="card panel">
           ${!canWriteEquipment() ? notice : ''}
           <h3>${t('searchTitle')}</h3>
           <input id="searchTagInput" class="input" placeholder="${t('searchPlaceholder')}" value="${escapeHtml(localStorage.getItem(CONFIG.STORAGE_KEYS.lastSearch) || '')}" />
@@ -963,6 +963,8 @@ function renderApp(notice = '') {
           </div>
           ${searchResultHtml()}
         </div>
+        ${canWriteEquipment() ? `<div class="card panel create-metrology-card">${metrologyHtml('create', state.createForm)}</div>` : ''}
+        ${categoryManagerHtml()}</div>
       </div>
 
       <div class="card panel">
@@ -973,8 +975,6 @@ function renderApp(notice = '') {
         </select>
         <small class="subtle">Equipamentos sem unidade aparecem em “Todas as unidades”.</small>
       </div>
-
-      ${categoryManagerHtml()}
 
       ${canManageUnits() ? `<div class="card panel" id="unitManagement">
         <h3>Unidades</h3>
