@@ -12,6 +12,9 @@ else:
     from passwords import hash_password, verify_password
 
 def make_engine(url):
+    # Keep the installed psycopg2 driver across SQLAlchemy default changes.
+    if url.startswith(('postgresql://', 'postgres://')):
+        url = 'postgresql+psycopg2://' + url.split('://', 1)[1]
     engine = create_engine(url, pool_pre_ping=True, future=True)
     if engine.dialect.name == 'sqlite':
         @event.listens_for(engine, 'connect')

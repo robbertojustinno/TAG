@@ -64,6 +64,12 @@ class MetrologyTests(unittest.TestCase):
         for term in ('Dados Metrológicos','Pressão','mmWS','12,6','Contribuição estimada da leitura'): self.assertIn(term,contents)
         Path('/tmp/metrology-test.pdf').write_bytes(pdf.content)
 
+    def test_postgres_uses_installed_driver(self):
+        for scheme in ('postgresql', 'postgres'):
+            engine = make_engine(scheme + '://test:test@localhost/test')
+            self.assertEqual(engine.url.drivername, 'postgresql+psycopg2')
+            engine.dispose()
+
     def test_additive_idempotent_migration(self):
         with tempfile.TemporaryDirectory() as directory:
             engine=make_engine('sqlite:///'+directory+'/old.db')
