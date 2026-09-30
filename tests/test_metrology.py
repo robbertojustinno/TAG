@@ -78,6 +78,44 @@ class MetrologyTests(unittest.TestCase):
             if path.startswith('/equipment/'+str(item['id'])):Path('/tmp/tagcheck-fase1-test.pdf').write_bytes(response.content)
         self.assertTrue(self.client.get('/equipment/pdf').content.startswith(b'%PDF-'))
         self.assertEqual(self.client.get(f'/equipment/{item["id"]}/qr-payload').status_code,200)
+    def test_category_hierarchy_filter_and_pdf(self):
+        parent=self.client.post('/asset-categories',headers=self.headers,json={'name':'Categoria '+secrets.token_hex(4)}).json()
+        response=self.client.post('/asset-categories',headers=self.headers,json={'name':'Instrumentos','parent_id':parent['id']})
+        self.assertEqual(response.status_code,201,response.text);child=response.json()
+        item=self.create(category_id=child['id']).json()
+        self.assertEqual(item['category_path'],parent['name']+' / Instrumentos')
+        self.assertEqual([r['id'] for r in self.client.get('/equipment',params={'category_id':parent['id']}).json()],[item['id']])
+        self.assertEqual(self.client.get('/equipment',params={'category_id':parent['id'],'include_children':'false'}).json(),[])
+        root=next(r for r in self.client.get('/asset-categories/tree').json() if r['id']==parent['id'])
+        self.assertEqual(root['asset_count'],1);self.assertEqual(root['children'][0]['asset_count'],1)
+        self.assertEqual(self.update(item).json()['category_id'],child['id'])
+        pdf=self.client.get(f'/equipment/{item["id"]}/report-pdf')
+        content=''.join(page.extract_text() for page in PdfReader(BytesIO(pdf.content)).pages)
+        self.assertIn('Categoria',content);self.assertIn('Instrumentos',content)
+        self.assertEqual(self.client.delete('/asset-categories/'+str(child['id']),headers=self.headers).status_code,409)
+        self.assertEqual(self.client.delete('/asset-categories/'+str(parent['id']),headers=self.headers).status_code,409)
+        self.assertEqual(self.client.patch('/asset-categories/'+str(parent['id']),headers=self.headers,json={'parent_id':child['id']}).status_code,422)
+        self.assertIsNone(self.update(item,category_id='').json()['category_id'])
+        self.assertEqual(self.client.delete('/asset-categories/'+str(child['id']),headers=self.headers).status_code,200)
+        self.assertEqual(self.client.delete('/asset-categories/'+str(parent['id']),headers=self.headers).status_code,200)
+
+    def test_category_validation_and_migration(self):
+        from migrate_categories import migrate_categories
+        before=self.client.get('/equipment/tag/OLD-42').json()
+        for _ in range(2):
+            with b.engine.begin() as connection:migrate_categories(connection)
+        self.assertEqual(before,self.client.get('/equipment/tag/OLD-42').json())
+        self.assertIsNone(before['category_id'])
+        for body in ({'name':' '},{'name':'Missing parent','parent_id':999999}):
+            self.assertEqual(self.client.post('/asset-categories',headers=self.headers,json=body).status_code,422)
+        self.assertEqual(self.client.post('/asset-categories',headers=self.headers,json={'name':'bombas'}).status_code,409)
+        self.assertEqual(self.client.post('/asset-categories',json={'name':'Unauthorized'}).status_code,401)
+        self.assertEqual(self.create(category_id=999999).status_code,422);self.upload.assert_not_called()
+        self.assertEqual(self.client.get('/equipment',params={'category_id':999999}).status_code,422)
+        category=self.client.get('/asset-categories').json()[0]
+        for body in ({'name':None},{'active':None},{'sort_order':None},{'name':' '}):
+            self.assertEqual(self.client.patch('/asset-categories/'+str(category['id']),headers=self.headers,json=body).status_code,422)
+
     def test_unknown_asset_pdf(self):self.assertEqual(self.client.get('/equipment/999999/report-pdf').status_code,404)
 
 if __name__=='__main__':unittest.main(verbosity=2)

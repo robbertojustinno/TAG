@@ -101,6 +101,7 @@ function normalizeEquipment(raw) {
     resolution: source.resolution ?? source.resolucao ?? '-',
     certificate: source.certificate ?? source.certificado ?? '-',
     owner: source.owner ?? source.responsavel ?? '-',
+    category_path: source.category_path || source.category_name || "-",
     notes: source.notes ?? source.observacoes ?? source.obs ?? '-',
     photo: source.photo ?? source.image ?? source.image_url ?? source.photo_url ?? source.foto ?? null,
     sheetUrl: source.sheet_url ?? source.ficha_url ?? source.url ?? source.link ?? source.online_url ?? null,
@@ -695,6 +696,7 @@ function renderDetail(item, noticeText = '') {
       <div class="card panel">
         <h3>Dados do instrumento</h3>
         <div class="meta-grid">
+          ${metaItem('Categoria', itemSafe.category_path)}
           ${metaItem('Tipo', itemSafe.type)}
           ${metaItem('Setor', itemSafe.sector)}
           ${metaItem('Localização', itemSafe.location)}

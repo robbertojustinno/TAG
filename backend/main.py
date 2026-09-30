@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Depends
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Depends, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -7,8 +7,8 @@ import cloudinary.uploader
 import os
 from io import BytesIO
 
-from sqlalchemy import create_engine, Column, Integer, String, Text, Numeric, inspect, text
-from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy import create_engine, Column, Integer, String, Text, Numeric, inspect, text, Boolean, ForeignKey
+from sqlalchemy.orm import sessionmaker, declarative_base, relationship
 
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
@@ -45,6 +45,17 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 Base = declarative_base()
 
 
+class AssetCategory(Base):
+    __tablename__ = "tagcheck_asset_categories"
+    id = Column(Integer, primary_key=True)
+    parent_id = Column(Integer, ForeignKey("tagcheck_asset_categories.id", ondelete="RESTRICT"), nullable=True)
+    name = Column(String(200), nullable=False)
+    slug = Column(String(200), nullable=False)
+    active = Column(Boolean, nullable=False, default=True)
+    sort_order = Column(Integer, nullable=False, default=0)
+    parent = relationship("AssetCategory", remote_side=[id])
+
+
 class Equipment(Base):
     __tablename__ = "tagcheck_equipment"
 
@@ -53,6 +64,8 @@ class Equipment(Base):
     name = Column(String, nullable=False)
     photo = Column(String, nullable=False)
 
+    category_id = Column(Integer, ForeignKey("tagcheck_asset_categories.id", ondelete="RESTRICT"), nullable=True)
+    category = relationship("AssetCategory")
     equipment_type = Column(String, nullable=True)
     sector = Column(String, nullable=True)
     location = Column(String, nullable=True)
@@ -106,6 +119,15 @@ ensure_extra_columns()
 with engine.begin() as connection:
     migrate_metrology(connection)
 
+if __package__:
+    from .migrate_categories import migrate_categories
+    from .categories import build_category_router, category_path, category_ids, validate_category
+else:
+    from migrate_categories import migrate_categories
+    from categories import build_category_router, category_path, category_ids, validate_category
+with engine.begin() as connection:
+    migrate_categories(connection)
+
 app = FastAPI()
 
 app.add_middleware(
@@ -150,6 +172,9 @@ def build_qr_payload(item: Equipment) -> str:
 def serialize_equipment(item: Equipment) -> dict:
     return {
         "id": item.id,
+        "category_id": item.category_id,
+        "category_name": item.category.name if item.category else "",
+        "category_path": category_path(item.category),
         "tag": item.tag,
         "name": item.name,
         "photo": item.photo,
@@ -174,6 +199,9 @@ def require_admin(authorization: str = Header(default=None)) -> str:
     if authorization != expected:
         raise HTTPException(status_code=401, detail="NÃ£o autorizado.")
     return authorization
+
+
+app.include_router(build_category_router(SessionLocal, AssetCategory, Equipment, require_admin))
 
 
 @app.get("/")
@@ -216,6 +244,7 @@ async def create_equipment(
     next_calibration_date: str = Form(""),
     status: str = Form("Ativo"),
     notes: str = Form(""),
+    category_id: int | None = Form(None, gt=0),
     metrology: dict = Depends(metrology_form),
     _auth: str = Depends(require_admin),
 ):
@@ -232,6 +261,7 @@ async def create_equipment(
         if existing:
             raise HTTPException(status_code=400, detail="TAG jÃ¡ cadastrada.")
 
+        validate_category(db, AssetCategory, category_id)
         apply_metrology(Equipment(), metrology)
         result = cloudinary.uploader.upload(
             photo.file,
@@ -243,6 +273,7 @@ async def create_equipment(
             raise HTTPException(status_code=500, detail="Falha ao obter URL da imagem.")
 
         item = Equipment(
+            category_id=category_id,
             tag=tag.strip(),
             name=name.strip(),
             photo=image_url,
@@ -274,10 +305,13 @@ async def create_equipment(
 
 
 @app.get("/equipment")
-def list_equipment():
+def list_equipment(category_id: int | None = Query(None, gt=0), include_children: bool = True):
     db = SessionLocal()
     try:
-        items = db.query(Equipment).order_by(Equipment.id.desc()).all()
+        query = db.query(Equipment)
+        if category_id is not None:
+            query = query.filter(Equipment.category_id.in_(category_ids(db, AssetCategory, category_id, include_children)))
+        items = query.order_by(Equipment.id.desc()).all()
         return [serialize_equipment(i) for i in items]
     finally:
         db.close()
@@ -320,6 +354,7 @@ def get_qr_payload(id: int):
 @app.put("/equipment/{id}")
 async def update_equipment(
     id: int,
+    request: Request,
     tag: str = Form(...),
     name: str = Form(...),
     photo: UploadFile | None = File(None),
@@ -333,6 +368,7 @@ async def update_equipment(
     next_calibration_date: str = Form(""),
     status: str = Form("Ativo"),
     notes: str = Form(""),
+    category_id: int | None = Form(None, gt=0),
     metrology: dict = Depends(metrology_form),
     _auth: str = Depends(require_admin),
 ):
@@ -349,6 +385,9 @@ async def update_equipment(
         if duplicated:
             raise HTTPException(status_code=400, detail="TAG jÃ¡ cadastrada em outro equipamento.")
 
+        if "category_id" in await request.form():
+            validate_category(db, AssetCategory, category_id)
+            item.category_id = category_id
         apply_metrology(item, metrology)
         item.tag = tag.strip()
         item.name = name.strip()
@@ -501,7 +540,7 @@ def build_asset_report(equipment_id=None):
         styles['Normal'].fontSize = 9
         story = [Paragraph('TAGCHECK', styles['Title']),
                  Paragraph('FICHA DO ATIVO' if equipment_id is not None else 'RELATÓRIO DE ATIVOS', styles['Heading2'])]
-        labels = {'tag': 'TAG', 'name': 'Nome', 'equipment_type': 'Tipo', 'sector': 'Setor',
+        labels = {'tag': 'TAG', 'name': 'Nome', 'category_path': 'Categoria', 'equipment_type': 'Tipo', 'sector': 'Setor',
                   'location': 'Localização', 'manufacturer': 'Fabricante', 'model': 'Modelo',
                   'serial_number': 'Número de série', 'calibration_date': 'Data de calibração',
                   'next_calibration_date': 'Próxima calibração', 'status': 'Status', 'notes': 'Observações'}

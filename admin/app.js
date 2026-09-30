@@ -200,6 +200,7 @@ const state = {
   language: localStorage.getItem(CONFIG.STORAGE_KEYS.language) || 'pt',
   authToken: localStorage.getItem(CONFIG.STORAGE_KEYS.authToken) || '',
   authUser: localStorage.getItem(CONFIG.STORAGE_KEYS.authUser) || '',
+  categories: [], categoryTree: [], selectedCategoryId: "", expandedCategories: new Set(),
   items: [],
   apiReachable: null,
   createPreviewUrl: '',
@@ -329,6 +330,7 @@ function normalizeItem(raw) {
     calibration_date: raw.calibration_date ?? '',
     next_calibration_date: raw.next_calibration_date ?? '',
     status: raw.status ?? t('active'),
+    category_id: raw.category_id ?? "", category_path: raw.category_path ?? "",
     notes: raw.notes ?? '',
     qr_payload: raw.qr_payload ?? ''
   };
@@ -352,8 +354,47 @@ async function loginAdmin(username, password) {
   return await response.json();
 }
 
+async function loadCategories() {
+  const response = await fetchWithTimeout(buildUrl(CONFIG.API_BASE_URL, '/asset-categories/tree'), {
+    headers: getAuthHeaders({ Accept: 'application/json' })
+  });
+  if (!response.ok) throw new Error(t('listError'));
+  state.categoryTree = await response.json();
+  state.categories = [];
+  const flatten = (nodes, parent = null) => (nodes || []).forEach(node => { state.categories.push({...node, parent_id: parent}); flatten(node.children, node.id); });
+  flatten(state.categoryTree);
+  return state.categories;
+}
+
+function categoryOptions(selected = '') {
+  const rows = [...state.categories].sort((a, b) => (a.parent_id || 0) - (b.parent_id || 0) || a.sort_order - b.sort_order || a.name.localeCompare(b.name));
+  const byParent = new Map();
+  rows.forEach(row => byParent.set(row.parent_id || 0, [...(byParent.get(row.parent_id || 0) || []), row]));
+  const result = [];
+  const walk = (parent, depth) => (byParent.get(parent) || []).forEach(row => {
+    result.push(`<option value="${escapeHtml(row.id)}" ${String(row.id) === String(selected) ? 'selected' : ''}>${'&nbsp;'.repeat(depth * 4)}${escapeHtml(row.name)}${row.asset_count ? ` (${row.asset_count})` : ''}</option>`);
+    walk(row.id, depth + 1);
+  });
+  walk(0, 0);
+  return result.join('');
+}
+
+function categoryManagerHtml() {
+  if (!state.categories.length && !Boolean(state.authToken)) return '';
+  const node = (c, depth = 0) => {
+    const open = state.expandedCategories.has(c.id);
+    const children = (c.children || []).map(child => node(child, depth + 1)).join('');
+    return `<div class="category-node" style="--depth:${depth}"><button type="button" class="tree-toggle" data-category-expand="${c.id}" aria-expanded="${open}">${children ? (open ? '▾' : '▸') : '·'}</button><button type="button" class="category-name ${String(state.selectedCategoryId) === String(c.id) ? 'selected' : ''}" data-category-id="${c.id}">${escapeHtml(c.name)} <span>(${c.asset_count || 0})</span></button>${Boolean(state.authToken) ? `<details class="category-actions"><summary aria-label="Ações">⋮</summary><div class="category-menu"><button type="button" data-category-sub="${c.id}">Nova subcategoria</button><button type="button" data-category-edit="${c.id}">Editar</button><button type="button" data-category-active="${c.id}" data-active="${!c.active}">${c.active ? 'Desativar' : 'Ativar'}</button><button type="button" data-category-delete="${c.id}">Excluir</button></div></details>` : ''}${open && children ? `<div class="category-children">${children}</div>` : ''}</div>`;
+  };
+  const form = Boolean(state.authToken) ? `<div id="categoryModal" class="category-modal" hidden><form id="categoryForm" class="compact-form"><label>Nome<input id="categoryNameInput" class="input" required maxlength="200"/></label><label>Categoria pai<select id="categoryParentInput" class="input"><option value="">Nenhuma — categoria raiz</option>${categoryOptions('')}</select></label><div class="inline-actions"><button class="primary-button compact-button" type="submit">Salvar</button><button id="cancelCategoryForm" class="outline-button compact-button" type="button">Cancelar</button></div></form></div>` : '';
+  return `<div class="card panel asset-manager"><div class="inline-actions compact-heading" style="justify-content:space-between"><h3>Gerenciador de ativos</h3>${Boolean(state.authToken) ? '<button id="newCategoryButton" class="primary-button compact-button" type="button">+ Categoria</button>' : ''}</div>${form}
+    <div class="asset-manager-grid"><div class="category-column"><div class="category-tree"><button type="button" class="category-name all-assets ${!state.selectedCategoryId ? 'selected' : ''}" data-all-categories="true">TODOS OS ATIVOS</button>${state.categoryTree.map(c => node(c)).join('')}</div></div><div class="asset-content-column"><div class="compact-category-filter"><label for="categoryFilter">Categoria</label><select id="categoryFilter" class="input"><option value="">Todos os ativos</option>${categoryOptions(state.selectedCategoryId)}</select></div><div><p class="subtle">Selecione uma categoria para mostrar ativos do ramo.</p><div id="categoryFeedback"></div></div></div></div></div>`;
+}
+
 async function loadItems() {
-  const response = await fetchWithTimeout(buildUrl(CONFIG.API_BASE_URL, CONFIG.ENDPOINTS.list), {
+  await loadCategories();
+  const path = CONFIG.ENDPOINTS.list + (state.selectedCategoryId ? `?category_id=${encodeURIComponent(state.selectedCategoryId)}&include_children=true` : "");
+  const response = await fetchWithTimeout(buildUrl(CONFIG.API_BASE_URL, path), {
     headers: { Accept: 'application/json' }
   });
 
@@ -512,6 +553,7 @@ function createAdditionalFields(prefix, values) {
       <input id="${prefix}CalibrationDateInput" class="input" type="${calibrationType}" placeholder="${t('calibrationDate')}" value="${escapeHtml(values.calibration_date || '')}" />
       <input id="${prefix}NextCalibrationDateInput" class="input" type="${nextCalibrationType}" placeholder="${t('nextCalibrationDate')}" value="${escapeHtml(values.next_calibration_date || '')}" />
       <input id="${prefix}StatusInput" class="input" placeholder="${t('chooseStatus')}" value="${escapeHtml(values.status || 'Ativo')}" />
+      <label>Categoria<select id="${prefix}CategoryInput" class="input"><option value="">Sem categoria</option>${categoryOptions(values.category_id)}</select></label>
       <input id="${prefix}NotesInput" class="input" placeholder="${t('notes')}" value="${escapeHtml(values.notes || '')}" />
     </div>
     ${metrologyHtml(prefix, values)}
@@ -532,6 +574,7 @@ function renderEditableRow(item) {
     calibration_date: item.calibration_date || '',
     next_calibration_date: item.next_calibration_date || '',
     status: item.status || 'Ativo',
+    category_id: item.category_id ?? '',
     notes: item.notes || '',
     photoFile: null,
     previewUrl: item.photo || ''
@@ -587,7 +630,7 @@ function renderRows(items) {
         <td class="code-soft">${escapeHtml(item.id)}</td>
         <td><strong>${escapeHtml(item.tag)}</strong></td>
         <td>
-          <strong>${escapeHtml(item.name)}</strong>
+          <strong>${escapeHtml(item.name)}</strong><div class="muted">${escapeHtml(item.category_path || "Sem categoria")}</div>
           <div class="muted">${escapeHtml(item.equipment_type || '')}</div>
           <div class="muted">${escapeHtml(item.model || '')}</div>
           <div class="muted">${escapeHtml(item.serial_number || '')}</div>
@@ -707,7 +750,7 @@ function renderApp(notice = '') {
           <div id="createFeedback">${notice}</div>
         </div>
 
-        <div class="card panel">
+<div class="search-category-stack"><div class="card panel">
           <h3>${t('searchTitle')}</h3>
           <input id="searchTagInput" class="input" placeholder="${t('searchPlaceholder')}" value="${escapeHtml(localStorage.getItem(CONFIG.STORAGE_KEYS.lastSearch) || '')}" />
           <div class="inline-actions">
@@ -716,6 +759,7 @@ function renderApp(notice = '') {
           </div>
           ${searchResultHtml()}
         </div>
+        ${categoryManagerHtml()}</div>
       </div>
 
       ${renderDeleteConfirm()}
@@ -755,6 +799,7 @@ function renderApp(notice = '') {
 }
 
 function updateCreateFormState() {
+  state.createForm.category_id = document.getElementById("createCategoryInput")?.value ?? "";
   state.createForm.tag = normalizeText(document.getElementById('tagInput')?.value);
   state.createForm.name = normalizeText(document.getElementById('nameInput')?.value);
   state.createForm.equipment_type = normalizeText(document.getElementById('createTypeInput')?.value);
@@ -817,7 +862,60 @@ function bindLoginEvents() {
   });
 }
 
+function bindCategoryEvents() {
+  const run = action => async event => {
+    try { await action(event); }
+    catch (error) { const feedback = document.getElementById('categoryFeedback'); if (feedback) feedback.textContent = error.message; }
+  };
+  const request = async (path, method, body) => {
+    const response = await fetchWithTimeout(buildUrl(CONFIG.API_BASE_URL, path), {method, headers:getAuthHeaders({'Content-Type':'application/json'}), ...(body ? {body:JSON.stringify(body)} : {})});
+    if (!response.ok) { const data = await response.json().catch(() => ({})); throw new Error(typeof data.detail === 'string' ? data.detail : 'Não foi possível salvar a categoria. Confira os dados.'); }
+    if (method === 'DELETE' && String(state.selectedCategoryId) === path.split('/').pop()) state.selectedCategoryId = '';
+    await loadItems(); renderApp();
+  };
+  const select = async value => { state.selectedCategoryId = value; await loadItems(); renderApp(); };
+  document.getElementById('categoryFilter')?.addEventListener('change', run(event => select(event.target.value)));
+  document.querySelectorAll('[data-category-id]').forEach(button => button.addEventListener('click', run(() => select(button.dataset.categoryId))));
+  document.querySelector('[data-all-categories]')?.addEventListener('click', run(() => select('')));
+  document.querySelectorAll('[data-category-expand]').forEach(button => button.addEventListener('click', () => {
+    const id = Number(button.dataset.categoryExpand);
+    if (state.expandedCategories.has(id)) state.expandedCategories.delete(id); else state.expandedCategories.add(id);
+    renderApp();
+  }));
+  let editingCategoryId = null;
+  const show = (parent, category = null) => {
+    editingCategoryId = category?.id ?? null;
+    document.getElementById('categoryModal').hidden = false;
+    document.getElementById('categoryParentInput').value = String(parent || '');
+    document.getElementById('categoryNameInput').value = category?.name || '';
+    document.getElementById('categoryNameInput').focus();
+  };
+  document.getElementById('newCategoryButton')?.addEventListener('click', () => show(''));
+  document.querySelectorAll('[data-category-sub]').forEach(button => button.addEventListener('click', () => show(button.dataset.categorySub)));
+  document.querySelectorAll('[data-category-edit]').forEach(button => button.addEventListener('click', () => {
+    const category = state.categories.find(row => String(row.id) === button.dataset.categoryEdit);
+    show(category.parent_id, category);
+  }));
+  document.getElementById('categoryForm')?.addEventListener('submit', run(async event => {
+    event.preventDefault();
+    const name = document.getElementById('categoryNameInput').value.trim();
+    const parent_id = Number(document.getElementById('categoryParentInput').value) || null;
+    await request('/asset-categories' + (editingCategoryId ? '/' + editingCategoryId : ''), editingCategoryId ? 'PATCH' : 'POST', {name,parent_id});
+  }));
+  document.getElementById('cancelCategoryForm')?.addEventListener('click', () => renderApp());
+  document.querySelectorAll('[data-category-active]').forEach(button => button.addEventListener('click', run(() => request('/asset-categories/'+button.dataset.categoryActive,'PATCH',{active:button.dataset.active==='true'}))));
+  document.querySelectorAll('[data-category-delete]').forEach(button => button.addEventListener('click', run(async () => {
+    const category = state.categories.find(row => String(row.id) === button.dataset.categoryDelete);
+    if (!window.confirm(`Excluir a categoria '${category.name}'?`)) return;
+    await request('/asset-categories/'+category.id,'DELETE');
+    if (String(state.selectedCategoryId) === String(category.id)) await select('');
+  })));
+}
+
 function bindEvents() {
+  bindCategoryEvents();
+  document.getElementById('createCategoryInput')?.addEventListener('change', updateCreateFormState);
+  document.getElementById('editCategoryInput')?.addEventListener('change', event => { if (state.editDraft) state.editDraft.category_id = event.target.value; });
   bindMetrology('create');
   bindMetrology('edit');
   bindCreateFormLiveState();
@@ -854,6 +952,7 @@ function bindEvents() {
     }
 
     const formData = new FormData();
+    formData.append('category_id', state.createForm.category_id || '');
     formData.append('tag', tag);
     formData.append('name', name);
     formData.append('photo', photoFile);
@@ -898,7 +997,7 @@ function bindEvents() {
           </div>
           <div class="search-result-body">
             <div class="search-result-label">${t('searchResult')}</div>
-            <strong>${escapeHtml(item.name)}</strong>
+            <strong>${escapeHtml(item.name)}</strong><div class="muted">${escapeHtml(item.category_path || "Sem categoria")}</div>
             <div class="muted">TAG: ${escapeHtml(item.tag)}</div>
             <div class="muted">${escapeHtml(item.equipment_type || '')}</div>
             <div class="muted">${escapeHtml(item.calibration_date || '')} → ${escapeHtml(item.next_calibration_date || '')}</div>
@@ -999,6 +1098,7 @@ function bindEvents() {
     if (!state.editingId || !state.editDraft) return;
 
     const form = new FormData();
+    form.append('category_id', document.getElementById('editCategoryInput')?.value || '');
     form.append('tag', state.editDraft.tag || '');
     form.append('name', state.editDraft.name || '');
     form.append('equipment_type', state.editDraft.equipment_type || '');
@@ -1091,6 +1191,7 @@ window.startEditItem = function(id) {
     calibration_date: item.calibration_date || '',
     next_calibration_date: item.next_calibration_date || '',
     status: item.status || 'Ativo',
+    category_id: item.category_id ?? '',
     notes: item.notes || '',
     photoFile: null,
     previewUrl: item.photo || ''
