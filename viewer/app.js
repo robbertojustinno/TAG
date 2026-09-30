@@ -84,6 +84,7 @@ function normalizeEquipment(raw) {
   const source = typeof raw === 'object' ? raw : { raw };
 
   return {
+    ...Object.fromEntries(["measurand", "measurement_unit", "range_min", "range_max", "accuracy_class", "resolution", "ema", "reading_contribution"].map(key => [key, source[key] ?? null])),
     id: source.id ?? source.instrument_id ?? source.equipment_id ?? source.asset_id ?? null,
     tag: source.tag ?? source.codigo ?? source.code ?? source.patrimonio ?? source.asset_code ?? source.instrument_tag ?? '-',
     name: source.name ?? source.nome ?? source.description ?? source.descricao ?? source.instrumento ?? source.equipment_name ?? 'Instrumento',
@@ -366,7 +367,7 @@ function metaItem(label, value) {
   return `
     <div class="meta-item">
       <div class="meta-label">${escapeHtml(label)}</div>
-      <div class="meta-value">${escapeHtml(value || '-')}</div>
+      <div class="meta-value">${escapeHtml(value ?? '-')}</div>
     </div>
   `;
 }
@@ -683,6 +684,7 @@ function renderDetail(item, noticeText = '') {
         <div class="detail-subtitle">TAG: <strong>${escapeHtml(itemSafe.tag)}</strong> • Série: <strong>${escapeHtml(itemSafe.serial)}</strong></div>
         <div class="detail-actions">
           ${itemSafe.sheetUrl ? `<a class="primary-button" href="${escapeHtml(itemSafe.sheetUrl)}" target="_blank" rel="noopener noreferrer">Abrir ficha online</a>` : ''}
+          ${itemSafe.id ? `<a class="outline-button" href="${escapeHtml(CONFIG.API_BASE_URL)}/equipment/${encodeURIComponent(itemSafe.id)}/report-pdf" target="_blank" rel="noopener noreferrer">PDF do ativo</a>` : ''}
           <button id="copyTag" class="secondary-button">Copiar TAG</button>
           <button id="refreshItem" class="outline-button">Atualizar dados</button>
           <button id="shareItem" class="outline-button">Copiar link</button>
@@ -698,8 +700,6 @@ function renderDetail(item, noticeText = '') {
           ${metaItem('Localização', itemSafe.location)}
           ${metaItem('Fabricante', itemSafe.manufacturer)}
           ${metaItem('Modelo', itemSafe.model)}
-          ${metaItem('Faixa', itemSafe.range)}
-          ${metaItem('Resolução', itemSafe.resolution)}
           ${metaItem('Responsável', itemSafe.owner)}
           ${metaItem('Data de calibração', itemSafe.calibrationDate)}
           ${metaItem('Validade', itemSafe.validityDate)}
@@ -707,6 +707,17 @@ function renderDetail(item, noticeText = '') {
           ${metaItem('Origem', itemSafe.source)}
         </div>
       </div>
+
+      <div class="card panel"><h3>Dados Metrológicos</h3><div class="meta-grid">
+          ${metaItem('Grandeza', itemSafe.measurand)}
+          ${metaItem('Unidade de medição', itemSafe.measurement_unit)}
+          ${metaItem('Faixa mínima', itemSafe.range_min)}
+          ${metaItem('Faixa máxima', itemSafe.range_max)}
+          ${metaItem('Classe', itemSafe.accuracy_class)}
+          ${metaItem('Resolução', itemSafe.resolution)}
+          ${metaItem('EMA', itemSafe.ema)}
+          ${metaItem('Contribuição estimada da leitura', itemSafe.reading_contribution)}
+      </div></div>
 
       <div class="card panel">
         <h3>Dados técnicos</h3>

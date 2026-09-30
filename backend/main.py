@@ -1,4 +1,4 @@
-﻿from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Depends
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -7,7 +7,7 @@ import cloudinary.uploader
 import os
 from io import BytesIO
 
-from sqlalchemy import create_engine, Column, Integer, String, Text, inspect, text
+from sqlalchemy import create_engine, Column, Integer, String, Text, Numeric, inspect, text
 from sqlalchemy.orm import sessionmaker, declarative_base
 
 from reportlab.lib.pagesizes import A4
@@ -15,6 +15,17 @@ from reportlab.lib.units import mm
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
 import qrcode
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, KeepTogether
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib import colors
+from xml.sax.saxutils import escape
+if __package__:
+    from .metrology import metrology_form, apply_metrology, serialize_metrology, LABELS as METROLOGY_LABELS
+    from .migrate_metrology import migrate_metrology
+else:
+    from metrology import metrology_form, apply_metrology, serialize_metrology, LABELS as METROLOGY_LABELS
+    from migrate_metrology import migrate_metrology
+
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
@@ -22,6 +33,8 @@ if not DATABASE_URL:
 
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+if DATABASE_URL.startswith("postgresql://"):
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://", 1)
 
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "123456")
@@ -50,6 +63,15 @@ class Equipment(Base):
     next_calibration_date = Column(String, nullable=True)
     status = Column(String, nullable=True)
     notes = Column(Text, nullable=True)
+    measurand = Column(String(200), nullable=True)
+    measurement_unit = Column(String(200), nullable=True)
+    range_min = Column(Numeric(24, 10), nullable=True)
+    range_max = Column(Numeric(24, 10), nullable=True)
+    accuracy_class = Column(String(200), nullable=True)
+    resolution = Column(Numeric(24, 10), nullable=True)
+    ema = Column(Numeric(24, 10), nullable=True)
+    reading_contribution = Column(Numeric(24, 10), nullable=True)
+
 
 
 Base.metadata.create_all(bind=engine)
@@ -81,6 +103,8 @@ def ensure_extra_columns() -> None:
 
 
 ensure_extra_columns()
+with engine.begin() as connection:
+    migrate_metrology(connection)
 
 app = FastAPI()
 
@@ -139,6 +163,7 @@ def serialize_equipment(item: Equipment) -> dict:
         "next_calibration_date": item.next_calibration_date or "",
         "status": item.status or "Ativo",
         "notes": item.notes or "",
+        **serialize_metrology(item),
         "qr_payload": build_qr_payload(item),
     }
     
@@ -191,6 +216,7 @@ async def create_equipment(
     next_calibration_date: str = Form(""),
     status: str = Form("Ativo"),
     notes: str = Form(""),
+    metrology: dict = Depends(metrology_form),
     _auth: str = Depends(require_admin),
 ):
     if not tag.strip():
@@ -206,6 +232,7 @@ async def create_equipment(
         if existing:
             raise HTTPException(status_code=400, detail="TAG jÃ¡ cadastrada.")
 
+        apply_metrology(Equipment(), metrology)
         result = cloudinary.uploader.upload(
             photo.file,
             folder="tagcheck/equipments",
@@ -230,6 +257,7 @@ async def create_equipment(
             status=status.strip() or "Ativo",
             notes=notes.strip(),
         )
+        apply_metrology(item, metrology)
         db.add(item)
         db.commit()
         db.refresh(item)
@@ -305,6 +333,7 @@ async def update_equipment(
     next_calibration_date: str = Form(""),
     status: str = Form("Ativo"),
     notes: str = Form(""),
+    metrology: dict = Depends(metrology_form),
     _auth: str = Depends(require_admin),
 ):
     db = SessionLocal()
@@ -320,6 +349,7 @@ async def update_equipment(
         if duplicated:
             raise HTTPException(status_code=400, detail="TAG jÃ¡ cadastrada em outro equipamento.")
 
+        apply_metrology(item, metrology)
         item.tag = tag.strip()
         item.name = name.strip()
         item.equipment_type = equipment_type.strip()
@@ -455,3 +485,53 @@ def equipment_pdf_labels():
          
     finally:
         db.close()
+
+
+def build_asset_report(equipment_id=None):
+    db = SessionLocal()
+    try:
+        query = db.query(Equipment)
+        if equipment_id is not None:
+            query = query.filter(Equipment.id == equipment_id)
+        items = query.order_by(Equipment.tag).all()
+        if not items:
+            raise HTTPException(404, detail="Nenhum ativo encontrado")
+        buffer = BytesIO()
+        styles = getSampleStyleSheet()
+        styles['Normal'].fontSize = 9
+        story = [Paragraph('TAGCHECK', styles['Title']),
+                 Paragraph('FICHA DO ATIVO' if equipment_id is not None else 'RELATÓRIO DE ATIVOS', styles['Heading2'])]
+        labels = {'tag': 'TAG', 'name': 'Nome', 'equipment_type': 'Tipo', 'sector': 'Setor',
+                  'location': 'Localização', 'manufacturer': 'Fabricante', 'model': 'Modelo',
+                  'serial_number': 'Número de série', 'calibration_date': 'Data de calibração',
+                  'next_calibration_date': 'Próxima calibração', 'status': 'Status', 'notes': 'Observações'}
+        def value_text(value):
+            if value is None or value == '':
+                return 'Não informado'
+            if isinstance(value, float):
+                return format(value, '.10f').rstrip('0').rstrip('.').replace('.', ',')
+            return str(value)
+        def data_table(values, names):
+            rows = [[Paragraph(escape(label), styles['Normal']), Paragraph(escape(value_text(values.get(key))), styles['Normal'])]
+                    for key, label in names.items()]
+            table = Table(rows, colWidths=[75*mm, 105*mm])
+            table.setStyle(TableStyle([('GRID', (0,0), (-1,-1), .25, colors.lightgrey), ('VALIGN', (0,0), (-1,-1), 'TOP'),
+                                       ('LEFTPADDING', (0,0), (-1,-1), 6), ('BOTTOMPADDING', (0,0), (-1,-1), 6)]))
+            return table
+        for item in items:
+            values = serialize_equipment(item)
+            story.extend([Spacer(1, 4*mm), Paragraph(escape(f'{item.tag} - {item.name}'), styles['Heading3']), data_table(values, labels)])
+            story.append(KeepTogether([Spacer(1, 4*mm), Paragraph('Dados Metrológicos', styles['Heading3']), data_table(values, METROLOGY_LABELS)]))
+        SimpleDocTemplate(buffer, pagesize=A4, leftMargin=15*mm, rightMargin=15*mm, topMargin=15*mm, bottomMargin=15*mm).build(story)
+        buffer.seek(0)
+        return StreamingResponse(buffer, media_type='application/pdf', headers={'Content-Disposition':'attachment; filename=ativos.pdf'})
+    finally:
+        db.close()
+
+@app.get('/equipment/{id}/report-pdf', response_class=StreamingResponse)
+def asset_report_pdf(id: int):
+    return build_asset_report(id)
+
+@app.get('/equipment/report-pdf', response_class=StreamingResponse)
+def all_assets_report_pdf():
+    return build_asset_report()

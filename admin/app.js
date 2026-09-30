@@ -1,3 +1,45 @@
+const METROLOGY_FIELDS = [["measurand", "Grandeza"], ["measurement_unit", "Unidade de medição"], ["range_min", "Faixa mínima"], ["range_max", "Faixa máxima"], ["accuracy_class", "Classe"], ["resolution", "Resolução"], ["ema", "EMA"], ["reading_contribution", "Contribuição estimada da leitura"]];
+const METROLOGY_HINTS = {
+  measurand: 'Ex.: Pressão', measurement_unit: 'Ex.: mmWS',
+  range_min: 'Ex.: 0', range_max: 'Ex.: 630',
+  accuracy_class: 'Ex.: 2,0 (%)', resolution: 'Ex.: 10',
+  ema: 'Ex.: 12,6', reading_contribution: 'Ex.: 5'
+};
+const METROLOGY_OPTIONS = {"measurand": ["Pressão", "Pressão diferencial", "Temperatura", "Umidade relativa", "Vazão", "Volume", "Nível", "Massa", "Força", "Torque", "Comprimento", "Deslocamento", "Velocidade", "Rotação", "Tempo", "Frequência", "Tensão elétrica", "Corrente elétrica", "Resistência elétrica", "Potência", "Energia", "Condutividade elétrica", "pH"], "measurement_unit": ["mmWS", "mmH₂O", "cmH₂O", "mH₂O", "mmHg", "inH₂O", "Pa", "kPa", "MPa", "bar", "mbar", "psi", "kgf/cm²", "°C", "°F", "K", "%UR", "%", "L/min", "L/h", "m³/h", "m³/s", "kg/h", "L", "mL", "m³", "mm", "cm", "m", "µm", "g", "kg", "mg", "t", "N", "kN", "N·m", "kgf", "m/s", "km/h", "rpm", "s", "min", "h", "Hz", "kHz", "V", "mV", "A", "mA", "µA", "Ω", "kΩ", "MΩ", "W", "kW", "Wh", "kWh", "µS/cm", "mS/cm", "pH"]};
+function metrologyValues(source) {
+  return Object.fromEntries(METROLOGY_FIELDS.map(([key]) => [key, source[key] ?? '']));
+}
+function readMetrology(prefix) {
+  return Object.fromEntries(METROLOGY_FIELDS.map(([key]) => [key, document.getElementById(`${prefix}Metro_${key}`)?.value.trim() ?? '']));
+}
+function metrologyHtml(prefix, values) {
+  return `<fieldset class="metrology-block"><legend>Dados Metrológicos</legend><div class="metrology-grid">
+    ${METROLOGY_FIELDS.map(([key, label]) => `<label>${label}<input id="${prefix}Metro_${key}" class="input" ${METROLOGY_OPTIONS[key] ? `list="${prefix}MetroOptions_${key}"` : ''} placeholder="${escapeHtml(METROLOGY_HINTS[key])}" ${['measurand','measurement_unit','accuracy_class'].includes(key) ? '' : 'inputmode="decimal"'} value="${escapeHtml(values[key] ?? '')}" /></label>`).join('')}
+  </div>
+  ${Object.entries(METROLOGY_OPTIONS).map(([key, options]) => `<datalist id="${prefix}MetroOptions_${key}">${options.map(value => `<option value="${escapeHtml(value)}"></option>`).join('')}</datalist>`).join('')}
+  <small>Grandeza e unidade: selecione na lista ou digite um valor personalizado.</small>
+  <button type="button" id="${prefix}CalculateEma" class="outline-button">Calcular EMA pela classe (%)</button>
+  <small>EMA = (faixa máxima − faixa mínima) × classe / 100. O valor pode ser informado manualmente.</small>
+  <div id="${prefix}MetroFeedback" role="status"></div></fieldset>`;
+}
+function bindMetrology(prefix) {
+  const save = () => Object.assign(prefix === 'create' ? state.createForm : state.editDraft, readMetrology(prefix));
+  METROLOGY_FIELDS.forEach(([key]) => document.getElementById(`${prefix}Metro_${key}`)?.addEventListener('input', save));
+  document.getElementById(`${prefix}CalculateEma`)?.addEventListener('click', () => {
+    const values = readMetrology(prefix);
+    const number = value => value.trim() === '' ? NaN : Number(value.replace(',', '.').replace(/%$/, '').trim());
+    const low = number(values.range_min), high = number(values.range_max), accuracy = number(values.accuracy_class);
+    const feedback = document.getElementById(`${prefix}MetroFeedback`);
+    if (![low, high, accuracy].every(Number.isFinite) || high < low || accuracy < 0) {
+      feedback.textContent = 'Informe uma faixa válida e a classe percentual.';
+      return;
+    }
+    document.getElementById(`${prefix}Metro_ema`).value = String(Number(((high-low)*accuracy/100).toFixed(10))).replace('.', ',');
+    save();
+    feedback.textContent = 'EMA calculado. Você pode editar o valor manualmente.';
+  });
+}
+
 const CONFIG = window.TAGCHECK_ADMIN_CONFIG;
 const app = document.getElementById('app');
 const openViewerButton = document.getElementById('openViewerButton');
@@ -273,6 +315,7 @@ async function pingApi() {
 
 function normalizeItem(raw) {
   return {
+    ...metrologyValues(raw),
     id: raw.id ?? null,
     tag: raw.tag ?? '-',
     name: raw.name ?? 'Instrumento',
@@ -471,11 +514,13 @@ function createAdditionalFields(prefix, values) {
       <input id="${prefix}StatusInput" class="input" placeholder="${t('chooseStatus')}" value="${escapeHtml(values.status || 'Ativo')}" />
       <input id="${prefix}NotesInput" class="input" placeholder="${t('notes')}" value="${escapeHtml(values.notes || '')}" />
     </div>
+    ${metrologyHtml(prefix, values)}
   `;
 }
 
 function renderEditableRow(item) {
   const draft = state.editDraft || {
+    ...metrologyValues(item),
     tag: item.tag,
     name: item.name,
     equipment_type: item.equipment_type || '',
@@ -678,6 +723,7 @@ function renderApp(notice = '') {
       <div class="card panel">
         <div class="inline-actions" style="justify-content: space-between; align-items: center;">
   <h3>${t('listTitle')}</h3>
+  <button id="reportPdfButton" class="primary-button" type="button">Gerar PDF dos ativos</button>
   <button id="pdfButton" class="primary-button" type="button">Gerar PDF QR</button>
 </div>
         <div class="table-wrap">
@@ -772,6 +818,8 @@ function bindLoginEvents() {
 }
 
 function bindEvents() {
+  bindMetrology('create');
+  bindMetrology('edit');
   bindCreateFormLiveState();
 
   document.getElementById('photoInput')?.addEventListener('change', (event) => {
@@ -812,6 +860,7 @@ function bindEvents() {
     formData.append('equipment_type', state.createForm.equipment_type);
     formData.append('sector', state.createForm.sector);
     formData.append('location', state.createForm.location);
+    METROLOGY_FIELDS.forEach(([key]) => formData.append(key, state.createForm[key] ?? ''));
     formData.append('manufacturer', state.createForm.manufacturer);
     formData.append('model', state.createForm.model);
     formData.append('serial_number', state.createForm.serial_number);
@@ -877,6 +926,9 @@ function bindEvents() {
     }
   });
 
+  document.getElementById('reportPdfButton')?.addEventListener('click', () => {
+    window.open(`${CONFIG.API_BASE_URL}/equipment/report-pdf`, '_blank', 'noopener,noreferrer');
+  });
   document.getElementById('pdfButton')?.addEventListener('click', () => {
     window.open(`${CONFIG.API_BASE_URL}/equipment/pdf`, '_blank', 'noopener,noreferrer');
   });
@@ -952,6 +1004,7 @@ function bindEvents() {
     form.append('equipment_type', state.editDraft.equipment_type || '');
     form.append('sector', state.editDraft.sector || '');
     form.append('location', state.editDraft.location || '');
+    METROLOGY_FIELDS.forEach(([key]) => form.append(key, readMetrology('edit')[key]));
     form.append('manufacturer', state.editDraft.manufacturer || '');
     form.append('model', state.editDraft.model || '');
     form.append('serial_number', state.editDraft.serial_number || '');
@@ -1026,6 +1079,7 @@ window.startEditItem = function(id) {
   state.editingId = id;
   state.deleteTargetId = null;
   state.editDraft = {
+    ...metrologyValues(item),
     tag: item.tag,
     name: item.name,
     equipment_type: item.equipment_type || '',
