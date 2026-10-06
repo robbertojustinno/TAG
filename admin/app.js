@@ -1533,6 +1533,10 @@ function logoutAdmin() {
   state.authUser = '';
   state.role = '';
   state.companyName = '';
+  state.companyId = null;
+  state.userId = null;
+  state.pendingOfflineCount = 0;
+  window.TAGCHECK_OFFLINE?.clearContext();
   state.isSuperadmin = false;
   state.showSuperadmin = false;
   state.pendingSelection = null;
