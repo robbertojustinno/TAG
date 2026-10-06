@@ -558,25 +558,57 @@ async function loadItems() {
   if (state.selectedUnitId) params.push(`unit_id=${encodeURIComponent(state.selectedUnitId)}`);
   if (state.selectedCategoryId) params.push(`category_id=${encodeURIComponent(state.selectedCategoryId)}`, 'include_children=true');
   const path = params.length ? `${CONFIG.ENDPOINTS.list}?${params.join('&')}` : CONFIG.ENDPOINTS.list;
-  const response = await fetchWithTimeout(buildUrl(CONFIG.API_BASE_URL, path), {
-    headers: getAuthHeaders({ Accept: 'application/json' })
-  });
-
-  if (!response.ok) throw new Error(t('listError'));
-
-  const data = await response.json();
-  state.items = Array.isArray(data) ? data.map(normalizeItem) : [];
+  const snapshotKey = `items:${state.selectedUnitId || 'all'}:${state.selectedCategoryId || 'all'}`;
+  let serverItems = [];
+  try {
+    const response = await fetchWithTimeout(buildUrl(CONFIG.API_BASE_URL, path), {
+      headers: getAuthHeaders({ Accept: 'application/json' })
+    });
+    if (!response.ok) throw new Error(t('listError'));
+    const data = await response.json();
+    serverItems = Array.isArray(data) ? data.map(normalizeItem) : [];
+    if (state.companyId && window.TAGCHECK_OFFLINE) await window.TAGCHECK_OFFLINE.putSnapshot(state.companyId, snapshotKey, serverItems);
+  } catch (error) {
+    if (!state.companyId || !window.TAGCHECK_OFFLINE || state.apiReachable !== false) throw error;
+    const cached = await window.TAGCHECK_OFFLINE.getSnapshot(state.companyId, snapshotKey, []);
+    serverItems = Array.isArray(cached) ? cached.map(normalizeItem) : [];
+  }
+  let queued = [];
+  if (state.companyId && window.TAGCHECK_OFFLINE) {
+    queued = await window.TAGCHECK_OFFLINE.listQueue(state.companyId);
+    state.pendingOfflineCount = queued.length;
+  }
+  const localItems = queued.map(row => normalizeItem({
+    ...(row.payload || {}),
+    id: row.local_id,
+    photo: row.photo ? URL.createObjectURL(row.photo) : null,
+    offline_pending: true,
+    offline_status: row.status,
+    status: row.status === 'sync_error' ? 'Erro de sincronização' : 'Pendente de sincronização'
+  }));
+  state.items = [...localItems, ...serverItems];
   return state.items;
 }
 
 async function loadCategories() {
-  const response = await fetchWithTimeout(buildUrl(CONFIG.API_BASE_URL, '/asset-categories/tree'), {
-    headers: getAuthHeaders({ Accept: 'application/json' })
-  });
-  if (!response.ok) throw new Error(t('listError'));
-  state.categoryTree = await response.json();
+  let data = [];
+  try {
+    const response = await fetchWithTimeout(buildUrl(CONFIG.API_BASE_URL, '/asset-categories/tree'), {
+      headers: getAuthHeaders({ Accept: 'application/json' })
+    });
+    if (!response.ok) throw new Error(t('listError'));
+    data = await response.json();
+    if (state.companyId && window.TAGCHECK_OFFLINE) await window.TAGCHECK_OFFLINE.putSnapshot(state.companyId, 'categories', data);
+  } catch (error) {
+    if (!state.companyId || !window.TAGCHECK_OFFLINE || state.apiReachable !== false) throw error;
+    data = await window.TAGCHECK_OFFLINE.getSnapshot(state.companyId, 'categories', []);
+  }
+  state.categoryTree = Array.isArray(data) ? data : [];
   state.categories = [];
-  const flatten = (nodes, parent = null) => (nodes || []).forEach(node => { state.categories.push({...node, parent_id: parent}); flatten(node.children, node.id); });
+  const flatten = (nodes, parent = null) => (nodes || []).forEach(node => {
+    state.categories.push({...node, parent_id: parent});
+    flatten(node.children, node.id);
+  });
   flatten(state.categoryTree);
   return state.categories;
 }
@@ -606,11 +638,18 @@ function categoryManagerHtml() {
     <div class="asset-manager-grid"><div class="category-column"><div class="category-tree"><button type="button" class="category-name all-assets ${!state.selectedCategoryId ? 'selected' : ''}" data-all-categories="true">TODOS OS ATIVOS</button>${state.categoryTree.map(c => node(c)).join('')}</div></div><div class="asset-content-column"><div class="compact-category-filter"><label for="categoryFilter">Categoria</label><select id="categoryFilter" class="input"><option value="">Todos os ativos</option>${categoryOptions(state.selectedCategoryId)}</select></div><div><p class="subtle">Selecione uma categoria para mostrar ativos do ramo.</p><div id="categoryFeedback"></div></div></div></div></div>`;
 }
 async function loadUnits() {
-  const response = await fetchWithTimeout(buildUrl(CONFIG.API_BASE_URL, '/units'), {
-    headers: getAuthHeaders({ Accept: 'application/json' })
-  });
-  if (!response.ok) throw new Error(t('listError'));
-  const data = await response.json();
+  let data = [];
+  try {
+    const response = await fetchWithTimeout(buildUrl(CONFIG.API_BASE_URL, '/units'), {
+      headers: getAuthHeaders({ Accept: 'application/json' })
+    });
+    if (!response.ok) throw new Error(t('listError'));
+    data = await response.json();
+    if (state.companyId && window.TAGCHECK_OFFLINE) await window.TAGCHECK_OFFLINE.putSnapshot(state.companyId, 'units', data);
+  } catch (error) {
+    if (!state.companyId || !window.TAGCHECK_OFFLINE || state.apiReachable !== false) throw error;
+    data = await window.TAGCHECK_OFFLINE.getSnapshot(state.companyId, 'units', []);
+  }
   state.units = Array.isArray(data) ? data : [];
   if (!state.units.some(unit => String(unit.id) === String(state.selectedUnitId))) state.selectedUnitId = '';
   return state.units;
