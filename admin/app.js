@@ -577,7 +577,7 @@ async function loadItems() {
     if (!response.ok) throw new Error(t('listError'));
     const data = await response.json();
     serverItems = Array.isArray(data) ? data.map(normalizeItem) : [];
-    if (state.companyId && window.TAGCHECK_OFFLINE) await window.TAGCHECK_OFFLINE.putSnapshot(state.companyId, snapshotKey, serverItems);
+    if (state.companyId && window.TAGCHECK_OFFLINE) { try { await window.TAGCHECK_OFFLINE.putSnapshot(state.companyId, snapshotKey, serverItems); } catch (_) {} }
   } catch (error) {
     if (!state.companyId || !window.TAGCHECK_OFFLINE || state.apiReachable !== false) throw error;
     const cached = await window.TAGCHECK_OFFLINE.getSnapshot(state.companyId, snapshotKey, []);
@@ -608,7 +608,7 @@ async function loadCategories() {
     });
     if (!response.ok) throw new Error(t('listError'));
     data = await response.json();
-    if (state.companyId && window.TAGCHECK_OFFLINE) await window.TAGCHECK_OFFLINE.putSnapshot(state.companyId, 'categories', data);
+    if (state.companyId && window.TAGCHECK_OFFLINE) { try { await window.TAGCHECK_OFFLINE.putSnapshot(state.companyId, 'categories', data); } catch (_) {} }
   } catch (error) {
     if (!state.companyId || !window.TAGCHECK_OFFLINE || state.apiReachable !== false) throw error;
     data = await window.TAGCHECK_OFFLINE.getSnapshot(state.companyId, 'categories', []);
@@ -655,7 +655,7 @@ async function loadUnits() {
     });
     if (!response.ok) throw new Error(t('listError'));
     data = await response.json();
-    if (state.companyId && window.TAGCHECK_OFFLINE) await window.TAGCHECK_OFFLINE.putSnapshot(state.companyId, 'units', data);
+    if (state.companyId && window.TAGCHECK_OFFLINE) { try { await window.TAGCHECK_OFFLINE.putSnapshot(state.companyId, 'units', data); } catch (_) {} }
   } catch (error) {
     if (!state.companyId || !window.TAGCHECK_OFFLINE || state.apiReachable !== false) throw error;
     data = await window.TAGCHECK_OFFLINE.getSnapshot(state.companyId, 'units', []);
