@@ -14,6 +14,8 @@ import hashlib
 import hmac
 import time
 from io import BytesIO
+import base64
+from PIL import Image as PILImage
 
 from sqlalchemy.orm import sessionmaker
 
@@ -166,6 +168,45 @@ cloudinary.config(
 )
 
 
+def persist_equipment_photo(upload: UploadFile, company_id: int) -> str:
+    """Store equipment photos without making Cloudinary a single point of failure.
+
+    Existing Cloudinary behavior remains preferred. If that provider rejects or is
+    unavailable, store a bounded JPEG data URL in the Fase 2 database only.
+    """
+    raw = upload.file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Foto vazia.")
+
+    try:
+        result = cloudinary.uploader.upload(
+            BytesIO(raw),
+            folder="tagcheck/equipments" if company_id == DEFAULT_COMPANY_ID else f"tagcheck/companies/{company_id}/equipments",
+            resource_type="image",
+        )
+        image_url = result.get("secure_url")
+        if image_url:
+            return image_url
+    except Exception:
+        # Provider failures must not block field work. Do not log credentials or
+        # provider exception text.
+        pass
+
+    try:
+        image = PILImage.open(BytesIO(raw))
+        if image.mode not in ("RGB", "L"):
+            image = image.convert("RGB")
+        elif image.mode == "L":
+            image = image.convert("RGB")
+        image.thumbnail((1280, 1280))
+        output = BytesIO()
+        image.save(output, format="JPEG", quality=82, optimize=True)
+        encoded = base64.b64encode(output.getvalue()).decode("ascii")
+        return f"data:image/jpeg;base64,{encoded}"
+    except Exception:
+        raise HTTPException(status_code=500, detail="Falha ao armazenar a foto do equipamento.") from None
+
+
 def build_qr_payload(item: Equipment) -> str:
     calibration_value = (
         (item.next_calibration_date or "").strip()
@@ -281,14 +322,7 @@ async def create_equipment(
             raise HTTPException(status_code=400, detail="TAG jÃ¡ cadastrada.")
 
         apply_metrology(Equipment(), metrology)
-        result = cloudinary.uploader.upload(
-            photo.file,
-            folder="tagcheck/equipments" if _auth.company_id == DEFAULT_COMPANY_ID else f"tagcheck/companies/{_auth.company_id}/equipments",
-            resource_type="image",
-        )
-        image_url = result.get("secure_url")
-        if not image_url:
-            raise HTTPException(status_code=500, detail="Falha ao obter URL da imagem.")
+        image_url = persist_equipment_photo(photo, _auth.company_id)
 
         item = Equipment(
             company_id=_auth.company_id,
@@ -472,14 +506,7 @@ async def update_equipment(
         item.notes = notes.strip()
 
         if photo and photo.filename:
-            result = cloudinary.uploader.upload(
-                photo.file,
-                folder="tagcheck/equipments" if _auth.company_id == DEFAULT_COMPANY_ID else f"tagcheck/companies/{_auth.company_id}/equipments",
-                resource_type="image",
-            )
-            image_url = result.get("secure_url")
-            if image_url:
-                item.photo = image_url
+            item.photo = persist_equipment_photo(photo, _auth.company_id)
 
         db.commit()
         db.refresh(item)
