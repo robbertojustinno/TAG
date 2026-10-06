@@ -91,9 +91,10 @@
       row.appendChild(badge);
     }
     const count = Array.isArray(rows) ? rows.length : Number(s.pendingOfflineCount || 0);
-    badge.textContent = navigator.onLine
+    const text = navigator.onLine
       ? (count ? `Sincronização: ${count} pendente(s)` : 'Online — sincronizado')
       : `Offline — ${count} pendente(s)`;
+    if (badge.textContent !== text) badge.textContent = text;
 
     let button = document.getElementById('offlineSyncNow');
     if (navigator.onLine && count) {
@@ -235,7 +236,15 @@
     refreshStatus().catch(() => null);
   });
 
-  const observer = new MutationObserver(() => refreshStatus().catch(() => null));
+  let statusScheduled = false;
+  const observer = new MutationObserver(() => {
+    if (statusScheduled) return;
+    statusScheduled = true;
+    setTimeout(() => {
+      statusScheduled = false;
+      refreshStatus().catch(() => null);
+    }, 50);
+  });
   observer.observe(document.getElementById('app'), { childList: true, subtree: true });
 
   setTimeout(() => {
