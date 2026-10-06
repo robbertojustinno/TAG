@@ -254,6 +254,8 @@ const state = {
   deleteTargetId: null
 };
 
+window.TAGCHECK_ADMIN_STATE = state;
+
 function t(key) {
   return I18N[state.language][key] || key;
 }
@@ -1602,6 +1604,8 @@ document.getElementById('superadminButton').addEventListener('click', () => {
   state.showSuperadmin = true;
   renderCurrentView();
 });
+
+window.TAGCHECK_ADMIN_OFFLINE_HOOKS = { renderCurrentView, loadItems, resetCreateForm };
 
 boot();
 
