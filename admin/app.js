@@ -43,6 +43,7 @@ function bindMetrology(prefix) {
 const CONFIG = window.TAGCHECK_ADMIN_CONFIG;
 const app = document.getElementById('app');
 const openViewerButton = document.getElementById('openViewerButton');
+const openCampoButton = document.getElementById('openCampoButton');
 const logoutButton = document.getElementById('logoutButton');
 
 const I18N = {
@@ -280,6 +281,10 @@ function syncHeaderLanguage() {
     ? 'secondary-button lang-button active'
     : 'outline-button lang-button';
   openViewerButton.textContent = t('viewer');
+  if (openCampoButton) {
+    openCampoButton.textContent = state.language === 'pt' ? 'Cadastro Offline' : 'Offline Registration';
+    openCampoButton.classList.toggle('hidden', !state.authToken);
+  }
   logoutButton.textContent = t('logout');
   logoutButton.classList.toggle('hidden', !state.authToken);
   const company = document.getElementById('activeCompany');
@@ -1605,6 +1610,7 @@ async function companyRequest(path, method = 'GET', data, blob = false) {
 async function boot() {
   syncHeaderLanguage();
   openViewerButton.href = CONFIG.VIEWER_BASE_URL;
+  if (openCampoButton) openCampoButton.href = CONFIG.CAMPO_BASE_URL || 'https://tagcheck-campo.onrender.com/';
 
   try {
     if (state.pendingPassword) {
