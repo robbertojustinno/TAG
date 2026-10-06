@@ -1612,7 +1612,8 @@ async function boot() {
       if (identity.must_change_password) return renderPasswordChange();
       return logoutAdmin();
     }
-    await pingApi();
+    if (navigator.onLine) await pingApi();
+    else state.apiReachable = false;
     if (state.authToken) {
       if (state.apiReachable === false) {
         const context = window.TAGCHECK_OFFLINE?.loadContext();
