@@ -434,6 +434,10 @@ async function readIdentity(token = state.authToken) {
   state.role = identity.role || '';
   state.companyId = identity.company_id == null ? null : Number(identity.company_id);
   state.userId = identity.user_id == null ? null : Number(identity.user_id);
+  if (state.companyId && window.TAGCHECK_OFFLINE) {
+    const expiresAt = window.TAGCHECK_OFFLINE.tokenExpiryMs(token) || (Date.now() + 8 * 60 * 60 * 1000);
+    window.TAGCHECK_OFFLINE.saveContext({ company_id: state.companyId, company_name: identity.company_name, user_id: state.userId, email: identity.email || state.authUser, role: identity.role, is_superadmin: identity.is_superadmin === true, expires_at: expiresAt });
+  }
   return identity;
 }
 
