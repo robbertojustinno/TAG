@@ -215,6 +215,9 @@ const state = {
   authToken: sessionStorage.getItem(CONFIG.STORAGE_KEYS.authToken) || '',
   authUser: sessionStorage.getItem(CONFIG.STORAGE_KEYS.authUser) || '',
   companyName: '',
+  companyId: null,
+  userId: null,
+  pendingOfflineCount: 0,
   isSuperadmin: false,
   role: '',
   apiSuccessVersion: 0,
@@ -427,6 +430,8 @@ async function readIdentity(token = state.authToken) {
   const identity = await response.json();
   state.logoUrl = identity.logo_url;
   state.role = identity.role || '';
+  state.companyId = identity.company_id == null ? null : Number(identity.company_id);
+  state.userId = identity.user_id == null ? null : Number(identity.user_id);
   return identity;
 }
 
