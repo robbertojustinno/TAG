@@ -7,6 +7,7 @@ const APP_SHELL = [
   './company-admin.js',
   './superadmin.js',
   './offline-store.js',
+  './offline-integration.js',
   './app.js',
   './public/logo.png',
   './public/favicon.png'
