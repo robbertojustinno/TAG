@@ -1612,16 +1612,30 @@ async function boot() {
     }
     await pingApi();
     if (state.authToken) {
-      const identity = await readIdentity();
-      if (identity.must_change_password) return requirePasswordChange(state.authToken);
-      state.companyName = identity.company_name;
-      state.isSuperadmin = identity.is_superadmin === true;
+      if (state.apiReachable === false) {
+        const context = window.TAGCHECK_OFFLINE?.loadContext();
+        if (!context) throw new Error('Sessão offline indisponível ou expirada. Conecte-se e entre novamente.');
+        state.companyId = Number(context.company_id);
+        state.companyName = context.company_name || '';
+        state.userId = context.user_id == null ? null : Number(context.user_id);
+        state.authUser = context.email || state.authUser;
+        state.role = context.role || '';
+        state.isSuperadmin = context.is_superadmin === true;
+      } else {
+        const identity = await readIdentity();
+        if (identity.must_change_password) return requirePasswordChange(state.authToken);
+        state.companyName = identity.company_name;
+        state.companyId = identity.company_id == null ? null : Number(identity.company_id);
+        state.userId = identity.user_id == null ? null : Number(identity.user_id);
+        state.isSuperadmin = identity.is_superadmin === true;
+      }
       syncHeaderLanguage();
-      await refreshCompanyLogo();
+      if (state.apiReachable !== false) await refreshCompanyLogo();
+      else clearCompanyLogo();
       await loadUnits();
       await loadCategories();
       await loadItems();
-      renderApp();
+      renderApp(state.apiReachable === false ? '<div class="notice">Modo offline ativo. Cadastros ficam isolados na empresa selecionada e serão sincronizados quando a conexão voltar.</div>' : '');
     } else {
       renderLogin();
     }
@@ -1631,6 +1645,16 @@ async function boot() {
       document.getElementById('passwordFeedback').textContent = 'Não foi possível validar a sessão. Verifique sua conexão ou entre novamente.';
       return;
     }
+    if (state.authToken && state.companyId) {
+      try {
+        state.apiReachable = false;
+        await loadUnits();
+        await loadCategories();
+        await loadItems();
+        renderApp('<div class="notice">Modo offline ativo. Os dados locais pertencem somente à empresa atual.</div>');
+        return;
+      } catch (_) {}
+    }
     if (state.authToken) {
       renderApp(`<div class="notice error">${escapeHtml(error.message || t('listError'))}</div>`);
     } else {
@@ -1638,7 +1662,6 @@ async function boot() {
     }
   }
 }
-
 document.getElementById('langPt').addEventListener('click', () => setLanguage('pt'));
 document.getElementById('langEn').addEventListener('click', () => setLanguage('en'));
 logoutButton.addEventListener('click', logoutAdmin);
