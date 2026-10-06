@@ -3,6 +3,7 @@
   const STORE_SNAPSHOTS = 'snapshots';
   const STORE_QUEUE = 'queue';
   const CONTEXT_KEY = 'tagcheck_offline_context_v1';
+  const FALLBACK_PREFIX = 'tagcheck_offline_fallback_company_';
 
   function requireCompanyId(companyId) {
     const id = Number(companyId);
@@ -14,9 +15,59 @@
     return `tagcheck_offline_company_${requireCompanyId(companyId)}`;
   }
 
+  function fallbackKey(companyId) {
+    return `${FALLBACK_PREFIX}${requireCompanyId(companyId)}`;
+  }
+
+  function readFallback(companyId) {
+    const id = requireCompanyId(companyId);
+    try {
+      const parsed = JSON.parse(localStorage.getItem(fallbackKey(id)) || 'null');
+      if (!parsed || Number(parsed.company_id) !== id) {
+        return { company_id: id, snapshots: {}, queue: [] };
+      }
+      parsed.snapshots = parsed.snapshots || {};
+      parsed.queue = Array.isArray(parsed.queue) ? parsed.queue : [];
+      return parsed;
+    } catch {
+      return { company_id: id, snapshots: {}, queue: [] };
+    }
+  }
+
+  function writeFallback(companyId, data) {
+    const id = requireCompanyId(companyId);
+    const safe = { ...data, company_id: id };
+    localStorage.setItem(fallbackKey(id), JSON.stringify(safe));
+  }
+
+  function blobToDataUrl(blob) {
+    if (!blob) return Promise.resolve(null);
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.onerror = () => reject(reader.error || new Error('Falha ao converter foto offline.'));
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  function dataUrlToBlob(dataUrl) {
+    if (!dataUrl || typeof dataUrl !== 'string') return null;
+    const [head, body] = dataUrl.split(',');
+    if (!head || !body) return null;
+    const mime = (head.match(/data:(.*?);base64/) || [])[1] || 'image/jpeg';
+    const bin = atob(body);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+    return new Blob([bytes], { type: mime });
+  }
+
   function openDb(companyId) {
     const name = dbName(companyId);
     return new Promise((resolve, reject) => {
+      if (!('indexedDB' in window)) {
+        reject(new Error('IndexedDB indisponível.'));
+        return;
+      }
       const request = indexedDB.open(name, DB_VERSION);
       request.onupgradeneeded = () => {
         const db = request.result;
@@ -29,6 +80,7 @@
       };
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error || new Error('Falha ao abrir armazenamento offline.'));
+      request.onblocked = () => reject(new Error('Armazenamento offline bloqueado.'));
     });
   }
 
@@ -58,16 +110,28 @@
 
   async function putSnapshot(companyId, key, value) {
     const id = requireCompanyId(companyId);
-    return withStore(id, STORE_SNAPSHOTS, 'readwrite', store =>
-      txRequest(store.put({ key: String(key), company_id: id, value, updated_at: new Date().toISOString() }))
-    );
+    try {
+      return await withStore(id, STORE_SNAPSHOTS, 'readwrite', store =>
+        txRequest(store.put({ key: String(key), company_id: id, value, updated_at: new Date().toISOString() }))
+      );
+    } catch {
+      const data = readFallback(id);
+      data.snapshots[String(key)] = { value, updated_at: new Date().toISOString() };
+      writeFallback(id, data);
+      return true;
+    }
   }
 
   async function getSnapshot(companyId, key, fallback = null) {
     const id = requireCompanyId(companyId);
-    const row = await withStore(id, STORE_SNAPSHOTS, 'readonly', store => txRequest(store.get(String(key))));
-    if (!row || Number(row.company_id) !== id) return fallback;
-    return row.value;
+    try {
+      const row = await withStore(id, STORE_SNAPSHOTS, 'readonly', store => txRequest(store.get(String(key))));
+      if (!row || Number(row.company_id) !== id) return fallback;
+      return row.value;
+    } catch {
+      const data = readFallback(id);
+      return data.snapshots?.[String(key)]?.value ?? fallback;
+    }
   }
 
   async function enqueueCreate(companyId, userId, payload, photoFile) {
@@ -85,34 +149,68 @@
       payload: structuredClone(payload),
       photo: photoFile || null
     };
-    await withStore(id, STORE_QUEUE, 'readwrite', store => txRequest(store.add(row)));
-    return row;
+    try {
+      await withStore(id, STORE_QUEUE, 'readwrite', store => txRequest(store.add(row)));
+      return row;
+    } catch {
+      const data = readFallback(id);
+      const serializable = { ...row, photo: null, photo_data_url: await blobToDataUrl(photoFile) };
+      data.queue.push(serializable);
+      writeFallback(id, data);
+      return row;
+    }
   }
 
   async function listQueue(companyId) {
     const id = requireCompanyId(companyId);
-    const rows = await withStore(id, STORE_QUEUE, 'readonly', store => txRequest(store.getAll()));
-    return (rows || [])
-      .filter(row => Number(row.company_id) === id)
-      .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
+    try {
+      const rows = await withStore(id, STORE_QUEUE, 'readonly', store => txRequest(store.getAll()));
+      return (rows || [])
+        .filter(row => Number(row.company_id) === id)
+        .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
+    } catch {
+      const data = readFallback(id);
+      return (data.queue || [])
+        .filter(row => Number(row.company_id) === id)
+        .map(row => ({ ...row, photo: row.photo_data_url ? dataUrlToBlob(row.photo_data_url) : null }))
+        .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
+    }
   }
 
   async function deleteQueueItem(companyId, localId) {
     const id = requireCompanyId(companyId);
-    return withStore(id, STORE_QUEUE, 'readwrite', store => txRequest(store.delete(String(localId))));
+    try {
+      return await withStore(id, STORE_QUEUE, 'readwrite', store => txRequest(store.delete(String(localId))));
+    } catch {
+      const data = readFallback(id);
+      data.queue = (data.queue || []).filter(row => String(row.local_id) !== String(localId));
+      writeFallback(id, data);
+      return true;
+    }
   }
 
   async function markQueueItem(companyId, localId, status, error = '') {
     const id = requireCompanyId(companyId);
-    return withStore(id, STORE_QUEUE, 'readwrite', async store => {
-      const row = await txRequest(store.get(String(localId)));
+    try {
+      return await withStore(id, STORE_QUEUE, 'readwrite', async store => {
+        const row = await txRequest(store.get(String(localId)));
+        if (!row || Number(row.company_id) !== id) return null;
+        row.status = status;
+        row.last_error = String(error || '');
+        row.updated_at = new Date().toISOString();
+        await txRequest(store.put(row));
+        return row;
+      });
+    } catch {
+      const data = readFallback(id);
+      const row = (data.queue || []).find(item => String(item.local_id) === String(localId));
       if (!row || Number(row.company_id) !== id) return null;
       row.status = status;
       row.last_error = String(error || '');
       row.updated_at = new Date().toISOString();
-      await txRequest(store.put(row));
+      writeFallback(id, data);
       return row;
-    });
+    }
   }
 
   function saveContext(context) {
