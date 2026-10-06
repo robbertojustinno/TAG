@@ -3,6 +3,7 @@ window.TAGCHECK_ADMIN_CONFIG = {
   APP_NAME: 'TagCheck Admin',
   API_BASE_URL: 'https://tagcheck-fase2-hml-api.onrender.com',
   VIEWER_BASE_URL: 'https://tagcheck-fase2-hml-viewer.onrender.com/',
+  CAMPO_BASE_URL: 'https://tagcheck-campo.onrender.com/',
   REQUEST_TIMEOUT_MS: 15000,
   STORAGE_KEYS: {
     language: 'tagcheck_admin_language',
