@@ -1685,6 +1685,43 @@ document.getElementById('superadminButton').addEventListener('click', () => {
   renderCurrentView();
 });
 
+openCampoButton?.addEventListener('click', event => {
+  event.preventDefault();
+  if (!state.authToken || !state.companyId) return;
+  const campoUrl = CONFIG.CAMPO_BASE_URL || 'https://tagcheck-campo.onrender.com/';
+  const targetOrigin = new URL(campoUrl).origin;
+  const popup = window.open(campoUrl, 'tagcheck_campo_offline');
+  if (!popup) return;
+
+  const expiresAt = window.TAGCHECK_OFFLINE?.tokenExpiryMs(state.authToken) || (Date.now() + 8 * 60 * 60 * 1000);
+  const payload = {
+    type: 'TAGCHECK_CAMPO_SESSION',
+    token: state.authToken,
+    company_id: state.companyId,
+    company_name: state.companyName,
+    user_id: state.userId,
+    email: state.authUser,
+    role: state.role,
+    expires_at: expiresAt
+  };
+
+  let attempts = 0;
+  const timer = setInterval(() => {
+    attempts += 1;
+    try { popup.postMessage(payload, targetOrigin); } catch (_) {}
+    if (attempts >= 20 || popup.closed) clearInterval(timer);
+  }, 300);
+
+  const ack = message => {
+    if (message.origin !== targetOrigin || message.source !== popup) return;
+    if (message.data?.type !== 'TAGCHECK_CAMPO_SESSION_ACK') return;
+    if (Number(message.data.company_id) !== Number(state.companyId)) return;
+    clearInterval(timer);
+    window.removeEventListener('message', ack);
+  };
+  window.addEventListener('message', ack);
+});
+
 window.TAGCHECK_ADMIN_OFFLINE_HOOKS = { renderCurrentView, loadItems, resetCreateForm };
 
 boot();
