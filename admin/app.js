@@ -877,9 +877,13 @@ function renderRows(items) {
   }
 
   return items.map((item) => {
-    if (canWriteEquipment() && state.editingId === item.id) {
+    if (canWriteEquipment() && state.editingId === item.id && !item.offline_pending) {
       return renderEditableRow(item);
     }
+
+    const actions = item.offline_pending
+      ? `<span class="muted">${escapeHtml(item.offline_status === 'sync_error' ? 'Erro — tentar sincronizar' : 'Aguardando internet')}</span>`
+      : `${canWriteEquipment() ? `<button class="secondary-button" onclick="startEditItem(${item.id})">${t('edit')}</button>` : ''}${canDeleteEquipment() ? `<button class="danger-button" onclick="askDeleteItem(${item.id})">${t('delete')}</button>` : ''}`;
 
     return `
       <tr>
@@ -894,18 +898,12 @@ function renderRows(items) {
         </td>
         <td>${photoHtml(item)}</td>
         <td>${statusPill(item.status)}</td>
-        <td>${qrHtml(item.tag)}</td>
-        <td>
-          <div class="inline-actions">
-            ${canWriteEquipment() ? `<button class="secondary-button" onclick="startEditItem(${item.id})">${t('edit')}</button>` : ''}
-            ${canDeleteEquipment() ? `<button class="danger-button" onclick="askDeleteItem(${item.id})">${t('delete')}</button>` : ''}
-          </div>
-        </td>
+        <td>${item.offline_pending ? '<span class="muted">Após sincronizar</span>' : qrHtml(item.tag)}</td>
+        <td><div class="inline-actions">${actions}</div></td>
       </tr>
     `;
   }).join('');
 }
-
 function renderDeleteConfirm() {
   if (!canDeleteEquipment() || !state.deleteTargetId) return '';
 
