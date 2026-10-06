@@ -348,6 +348,11 @@ async function fetchWithTimeout(url, options = {}) {
       logoutAdmin();
     }
     return response;
+  } catch (error) {
+    state.apiReachable = false;
+    const badge = document.getElementById('apiStatusBadge');
+    if (badge) badge.textContent = t('apiFail');
+    throw error;
   } finally {
     clearTimeout(timer);
   }
