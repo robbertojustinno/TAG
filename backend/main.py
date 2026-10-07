@@ -574,3 +574,11 @@ def asset_report_pdf(id: int):
 @app.get('/equipment/report-pdf', response_class=StreamingResponse)
 def all_assets_report_pdf():
     return build_asset_report()
+
+
+# Isolated ROVIX website metrics; reuses the existing owner login.
+if __package__:
+    from .site_metrics import build_metrics_router
+else:
+    from site_metrics import build_metrics_router
+app.include_router(build_metrics_router(engine))
