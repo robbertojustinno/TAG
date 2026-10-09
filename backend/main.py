@@ -729,28 +729,30 @@ def equipment_report_pdf(payload: EquipmentReportPayload, _auth: CompanyContext 
         centered_title = styles['Heading3'].clone('CenteredAssetListTitle')
         centered_title.alignment = 1
         centered_title.fontName = 'Helvetica-Bold'
-        compact_header = Table([
-            [
-                Paragraph('<b>TAGCHECK</b>', title_style),
-                Paragraph(
-                    f"<b>{company.name}</b><br/><b>{report_title}</b>",
-                    centered_title
-                ),
-                Paragraph(
-                    f"Emissão: {time.strftime('%d/%m/%y')}<br/>Quantidade: {len(items)}",
-                    normal
-                )
-            ]
-        ], colWidths=[42*mm, 165*mm, 70*mm])
-        compact_header.setStyle(TableStyle([
-            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-            ('ALIGN', (2,0), (2,0), 'RIGHT'),
-            ('LEFTPADDING', (0,0), (-1,-1), 0),
-            ('RIGHTPADDING', (0,0), (-1,-1), 0),
-            ('TOPPADDING', (0,0), (-1,-1), 0),
-            ('BOTTOMPADDING', (0,0), (-1,-1), 1),
-        ]))
-        story.extend([compact_header, Spacer(1, 4*mm)])
+
+        def build_compact_header():
+            header = Table([
+                [
+                    Paragraph('<b>TAGCHECK</b>', title_style),
+                    Paragraph(
+                        f"<b>{company.name}</b><br/><b>{report_title}</b>",
+                        centered_title
+                    ),
+                    Paragraph(
+                        f"Emissão: {time.strftime('%d/%m/%Y')} {time.strftime('%H:%M')}<br/>Quantidade: {len(items)}",
+                        normal
+                    )
+                ]
+            ], colWidths=[42*mm, 165*mm, 70*mm])
+            header.setStyle(TableStyle([
+                ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+                ('ALIGN', (2,0), (2,0), 'RIGHT'),
+                ('LEFTPADDING', (0,0), (-1,-1), 0),
+                ('RIGHTPADDING', (0,0), (-1,-1), 0),
+                ('TOPPADDING', (0,0), (-1,-1), 0),
+                ('BOTTOMPADDING', (0,0), (-1,-1), 1),
+            ]))
+            return header
 
         from xml.sax.saxutils import escape
 
@@ -811,6 +813,8 @@ def equipment_report_pdf(payload: EquipmentReportPayload, _auth: CompanyContext 
         # Isso evita uma primeira página muito cheia e uma segunda quase vazia.
         page_rows = 27
         for index in range(0, len(rows), page_rows):
+            story.append(build_compact_header())
+            story.append(Spacer(1, 4*mm))
             chunk = rows[index:index + page_rows]
             data = [[cell(h) for h in headers]] + chunk
             table = Table(data, repeatRows=1, colWidths=col_widths, hAlign='LEFT')
