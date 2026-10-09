@@ -1347,6 +1347,7 @@ function bindEvents() {
     }
   });
 
+  document.getElementById('reportPdfButton')?.addEventListener('click', openConsolidatedReportPdf);
   document.getElementById('pdfButton')?.addEventListener('click', openEquipmentPdf);
 
 
