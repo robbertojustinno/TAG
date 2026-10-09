@@ -733,7 +733,7 @@ def equipment_report_pdf(payload: EquipmentReportPayload, _auth: CompanyContext 
             [
                 Paragraph('<b>TAGCHECK</b>', title_style),
                 Paragraph(
-                    f"<b>{company.name}</b><br/><para alignment='center'><b>{report_title}</b></para>",
+                    f"<b>{company.name}</b><br/><b>{report_title}</b>",
                     centered_title
                 ),
                 Paragraph(
