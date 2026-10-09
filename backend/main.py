@@ -19,7 +19,7 @@ from PIL import Image as PILImage
 
 from sqlalchemy.orm import sessionmaker
 
-from reportlab.lib.pagesizes import A4
+from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image as ReportImage
@@ -638,14 +638,22 @@ class EquipmentReportPayload(BaseModel):
 
 class _ReportCanvas(canvas.Canvas):
     def __init__(self, *args, **kwargs):
-        canvas.Canvas.__init__(self, *args, **kwargs); self._states = []
+        canvas.Canvas.__init__(self, *args, **kwargs)
+        self._states = []
     def showPage(self):
-        self._states.append(dict(self.__dict__)); self._startPage()
+        self._states.append(dict(self.__dict__))
+        self._startPage()
     def save(self):
         total = len(self._states)
+        page_width = self._pagesize[0]
         for state in self._states:
-            self.__dict__.update(state); self.saveState(); self.setFont('Helvetica', 7); self.setFillColor(colors.grey)
-            self.drawCentredString(A4[0]/2, 7*mm, f'Página {self._pageNumber} de {total}'); self.restoreState(); canvas.Canvas.showPage(self)
+            self.__dict__.update(state)
+            self.saveState()
+            self.setFont('Helvetica', 7)
+            self.setFillColor(colors.grey)
+            self.drawCentredString(page_width / 2, 7 * mm, f'Página {self._pageNumber} de {total}')
+            self.restoreState()
+            canvas.Canvas.showPage(self)
         canvas.Canvas.save(self)
 
 
@@ -656,15 +664,19 @@ def equipment_report_pdf(payload: EquipmentReportPayload, _auth: CompanyContext 
         category_ids = None
         category_title = None
         if payload.category_id is not None:
-            root = db.query(AssetCategory).filter(AssetCategory.id == payload.category_id,
-                                                   AssetCategory.company_id == _auth.company_id).first()
+            root = db.query(AssetCategory).filter(
+                AssetCategory.id == payload.category_id,
+                AssetCategory.company_id == _auth.company_id
+            ).first()
             if not root:
                 raise HTTPException(status_code=404, detail="Category not found in the active company")
             category_ids = [root.id]
             pending = [root.id]
             while pending:
                 child_ids = [row.id for row in db.query(AssetCategory.id).filter(
-                    AssetCategory.parent_id.in_(pending), AssetCategory.company_id == _auth.company_id)]
+                    AssetCategory.parent_id.in_(pending),
+                    AssetCategory.company_id == _auth.company_id
+                )]
                 category_ids.extend(child_ids)
                 pending = child_ids
             path = []
@@ -686,8 +698,13 @@ def equipment_report_pdf(payload: EquipmentReportPayload, _auth: CompanyContext 
             query = query.filter(Equipment.status == payload.status.strip())
         if payload.search and payload.search.strip():
             term = f"%{payload.search.strip()}%"
-            query = query.filter(or_(Equipment.tag.ilike(term), Equipment.name.ilike(term),
-                                     Equipment.manufacturer.ilike(term), Equipment.model.ilike(term)))
+            query = query.filter(or_(
+                Equipment.tag.ilike(term),
+                Equipment.name.ilike(term),
+                Equipment.manufacturer.ilike(term),
+                Equipment.model.ilike(term)
+            ))
+
         items = query.order_by(Equipment.tag.asc(), Equipment.id.asc()).all()
         if not items:
             raise HTTPException(status_code=404, detail="Nenhum equipamento encontrado para o relatório")
@@ -695,42 +712,110 @@ def equipment_report_pdf(payload: EquipmentReportPayload, _auth: CompanyContext 
         company = db.get(Company, _auth.company_id)
         buffer = BytesIO()
         styles = getSampleStyleSheet()
-        normal = styles['Normal']; normal.fontName = 'Helvetica'; normal.fontSize = 8
-        title_style = styles['Title']; title_style.fontName = 'Helvetica-Bold'; title_style.fontSize = 16
-        story = [Paragraph('TAGCHECK', title_style), Paragraph(company.name, styles['Heading2'])]
+        normal = styles['Normal']
+        normal.fontName = 'Helvetica'
+        normal.fontSize = 7
+        normal.leading = 8
+
+        title_style = styles['Title']
+        title_style.fontName = 'Helvetica-Bold'
+        title_style.fontSize = 14
+
+        story = []
         if getattr(company, 'logo_data', None):
-            logo = ReportImage(BytesIO(company.logo_data), width=32*mm, height=12*mm, kind='proportional')
-            story.insert(0, logo)
-        report_title = 'FICHA DO ATIVO' if payload.equipment_id is not None else ('RELATÓRIO GERAL DE ATIVOS' if not category_title else f'RELATÓRIO DE ATIVOS — {category_title}')
-        story.extend([Spacer(1, 4*mm), Paragraph(report_title, styles['Heading2']),
-                      Paragraph(f"Emissão: {time.strftime('%d/%m/%Y %H:%M:%S')}  |  Quantidade: {len(items)}", normal), Spacer(1, 4*mm)])
-        headers = ['TAG', 'NOME', 'CATEGORIA', 'UNIDADE', 'TIPO', 'FABRICANTE', 'MODELO', 'STATUS']
-        data = [headers]
-        for item in items:
-            data.append([item.tag or '-', item.name or '-', ' > '.join(serialize_equipment(item)['category_path']) or 'Sem categoria',
-                         item.unit.name if item.unit else '-', item.equipment_type or '-', item.manufacturer or '-',
-                         item.model or '-', item.status or 'Ativo'])
-        table = Table(data, repeatRows=1, colWidths=[19*mm, 28*mm, 36*mm, 24*mm, 22*mm, 27*mm, 25*mm, 18*mm])
-        table.setStyle(TableStyle([('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1f2937')), ('TEXTCOLOR', (0,0), (-1,0), colors.white),
-                                   ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'), ('FONTSIZE', (0,0), (-1,-1), 7),
-                                   ('GRID', (0,0), (-1,-1), 0.25, colors.HexColor('#9ca3af')), ('VALIGN', (0,0), (-1,-1), 'TOP'),
-                                   ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor('#f3f4f6')])]))
-        story.append(table)
+            story.append(ReportImage(BytesIO(company.logo_data), width=28*mm, height=11*mm, kind='proportional'))
+        story.append(Paragraph('TAGCHECK', title_style))
+        story.append(Paragraph(company.name, styles['Heading2']))
+
+        report_title = 'LISTA DE ATIVOS'
+        if category_title:
+            report_title += f' - {category_title}'
+        story.extend([
+            Spacer(1, 2*mm),
+            Paragraph(report_title, styles['Heading2']),
+            Paragraph(
+                f"Emissão: {time.strftime('%d/%m/%Y %H:%M:%S')}  |  Quantidade: {len(items)}",
+                normal
+            ),
+            Spacer(1, 3*mm)
+        ])
+
         from xml.sax.saxutils import escape
-        for item in items:
-            story.extend([Spacer(1, 5*mm), Paragraph(escape(f'{item.tag} — {item.name}'), styles['Heading3']),
-                          Paragraph('Dados Metrológicos', styles['Heading4'])])
-            values = serialize_metrology(item)
-            rows = [[Paragraph(escape(label), normal), Paragraph(escape((format(values[key], '.10f').rstrip('0').rstrip('.').replace('.', ',') if isinstance(values[key], float) else str(values[key])) if values[key] is not None else 'Não informado'), normal)]
-                    for key, label in METROLOGY_LABELS.items()]
-            details = Table(rows, colWidths=[80*mm, 119*mm])
-            details.setStyle(TableStyle([('GRID', (0,0), (-1,-1), .25, colors.lightgrey), ('VALIGN', (0,0), (-1,-1), 'TOP')]))
-            story.append(details)
-        doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=8*mm, leftMargin=8*mm, topMargin=12*mm, bottomMargin=14*mm,
-                                title='TagCheck — Relatório de Ativos')
+
+        def cell(value):
+            text_value = '-' if value is None or str(value).strip() == '' else str(value)
+            return Paragraph(escape(text_value), normal)
+
+        headers = [
+            'Seq', 'TAG', 'Descrição', 'Tipo', 'Setor', 'Local',
+            'Categoria', 'Unidade', 'Fabricante', 'Modelo',
+            'Nº Série', 'Status', 'Data Calib.', 'Próx. Calib.'
+        ]
+        data = [[cell(h) for h in headers]]
+
+        for seq, item in enumerate(items, start=1):
+            serialized = serialize_equipment(item)
+            category_path = ' > '.join(serialized['category_path']) or 'Sem categoria'
+            data.append([
+                cell(seq),
+                cell(item.tag),
+                cell(item.name),
+                cell(item.equipment_type),
+                cell(item.sector),
+                cell(item.location),
+                cell(category_path),
+                cell(item.unit.name if item.unit else '-'),
+                cell(item.manufacturer),
+                cell(item.model),
+                cell(item.serial_number),
+                cell(item.status or 'Ativo'),
+                cell(item.calibration_date),
+                cell(item.next_calibration_date),
+            ])
+
+        page_size = landscape(A4)
+        col_widths = [
+            9*mm, 19*mm, 34*mm, 20*mm, 20*mm, 24*mm,
+            28*mm, 22*mm, 22*mm, 22*mm, 22*mm, 18*mm,
+            22*mm, 23*mm
+        ]
+        table = Table(data, repeatRows=1, colWidths=col_widths, hAlign='LEFT')
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1f2937')),
+            ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+            ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+            ('ALIGN', (0,0), (0,-1), 'CENTER'),
+            ('ALIGN', (11,1), (11,-1), 'CENTER'),
+            ('FONTSIZE', (0,0), (-1,-1), 6.2),
+            ('LEADING', (0,0), (-1,-1), 7),
+            ('GRID', (0,0), (-1,-1), 0.3, colors.HexColor('#9ca3af')),
+            ('VALIGN', (0,0), (-1,-1), 'TOP'),
+            ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor('#f3f4f6')]),
+            ('LEFTPADDING', (0,0), (-1,-1), 2),
+            ('RIGHTPADDING', (0,0), (-1,-1), 2),
+            ('TOPPADDING', (0,0), (-1,-1), 2),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 2),
+        ]))
+        story.append(table)
+
+        doc = SimpleDocTemplate(
+            buffer,
+            pagesize=page_size,
+            rightMargin=5*mm,
+            leftMargin=5*mm,
+            topMargin=8*mm,
+            bottomMargin=13*mm,
+            title='TagCheck - Lista de Ativos'
+        )
         doc.build(story, canvasmaker=_ReportCanvas)
         buffer.seek(0)
-        return StreamingResponse(buffer, media_type='application/pdf', headers={'Content-Disposition': 'attachment; filename=relatorio_ativos.pdf'})
+
+        filename = 'lista_ativos.pdf' if not category_title else 'lista_ativos_categoria.pdf'
+        return StreamingResponse(
+            buffer,
+            media_type='application/pdf',
+            headers={'Content-Disposition': f'attachment; filename={filename}'}
+        )
     finally:
         db.close()
 
