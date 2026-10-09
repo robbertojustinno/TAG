@@ -748,8 +748,8 @@ def equipment_report_pdf(payload: EquipmentReportPayload, _auth: CompanyContext 
 
         headers = [
             'Seq', 'TAG', 'Descrição', 'Tipo', 'Setor', 'Local',
-            'Categoria', 'Unidade', 'Fabricante', 'Modelo',
-            'Nº Série', 'Status', 'Data Calib.', 'Próx. Calib.'
+            'Categoria', 'Unidade', 'Fabricante', 'Status',
+            'Data Calib.', 'Próx. Calib.'
         ]
 
         rows = []
@@ -766,8 +766,6 @@ def equipment_report_pdf(payload: EquipmentReportPayload, _auth: CompanyContext 
                 cell(category_path),
                 cell(item.unit.name if item.unit else '-'),
                 cell(item.manufacturer),
-                cell(item.model),
-                cell(item.serial_number),
                 cell(item.status or 'Ativo'),
                 cell(item.calibration_date),
                 cell(item.next_calibration_date),
@@ -776,9 +774,8 @@ def equipment_report_pdf(payload: EquipmentReportPayload, _auth: CompanyContext 
         page_size = landscape(A4)
         # Mantém a tabela inteira dentro da largura útil do A4 horizontal.
         col_widths = [
-            7*mm, 18*mm, 28*mm, 18*mm, 19*mm, 22*mm,
-            26*mm, 20*mm, 20*mm, 19*mm, 19*mm, 16*mm,
-            19*mm, 19*mm
+            7*mm, 20*mm, 36*mm, 20*mm, 22*mm, 26*mm,
+            30*mm, 22*mm, 24*mm, 18*mm, 22*mm, 23*mm
         ]
 
         table_style = TableStyle([
@@ -786,7 +783,7 @@ def equipment_report_pdf(payload: EquipmentReportPayload, _auth: CompanyContext 
             ('TEXTCOLOR', (0,0), (-1,0), colors.white),
             ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
             ('ALIGN', (0,0), (0,-1), 'CENTER'),
-            ('ALIGN', (11,1), (11,-1), 'CENTER'),
+            ('ALIGN', (9,1), (9,-1), 'CENTER'),
             ('FONTSIZE', (0,0), (-1,-1), 5.6),
             ('LEADING', (0,0), (-1,-1), 6.3),
             ('GRID', (0,0), (-1,-1), 0.3, colors.HexColor('#9ca3af')),
