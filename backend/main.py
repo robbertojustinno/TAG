@@ -22,7 +22,7 @@ from sqlalchemy.orm import sessionmaker
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image as ReportImage
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak, Image as ReportImage
 from reportlab.lib.units import mm
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
@@ -751,12 +751,12 @@ def equipment_report_pdf(payload: EquipmentReportPayload, _auth: CompanyContext 
             'Categoria', 'Unidade', 'Fabricante', 'Modelo',
             'Nº Série', 'Status', 'Data Calib.', 'Próx. Calib.'
         ]
-        data = [[cell(h) for h in headers]]
 
+        rows = []
         for seq, item in enumerate(items, start=1):
             serialized = serialize_equipment(item)
             category_path = ' > '.join(serialized['category_path']) or 'Sem categoria'
-            data.append([
+            rows.append([
                 cell(seq),
                 cell(item.tag),
                 cell(item.name),
@@ -774,29 +774,41 @@ def equipment_report_pdf(payload: EquipmentReportPayload, _auth: CompanyContext 
             ])
 
         page_size = landscape(A4)
+        # Mantém a tabela inteira dentro da largura útil do A4 horizontal.
         col_widths = [
-            9*mm, 19*mm, 34*mm, 20*mm, 20*mm, 24*mm,
-            28*mm, 22*mm, 22*mm, 22*mm, 22*mm, 18*mm,
-            22*mm, 23*mm
+            7*mm, 18*mm, 28*mm, 18*mm, 19*mm, 22*mm,
+            26*mm, 20*mm, 20*mm, 19*mm, 19*mm, 16*mm,
+            19*mm, 19*mm
         ]
-        table = Table(data, repeatRows=1, colWidths=col_widths, hAlign='LEFT')
-        table.setStyle(TableStyle([
+
+        table_style = TableStyle([
             ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1f2937')),
             ('TEXTCOLOR', (0,0), (-1,0), colors.white),
             ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
             ('ALIGN', (0,0), (0,-1), 'CENTER'),
             ('ALIGN', (11,1), (11,-1), 'CENTER'),
-            ('FONTSIZE', (0,0), (-1,-1), 6.2),
-            ('LEADING', (0,0), (-1,-1), 7),
+            ('FONTSIZE', (0,0), (-1,-1), 5.6),
+            ('LEADING', (0,0), (-1,-1), 6.3),
             ('GRID', (0,0), (-1,-1), 0.3, colors.HexColor('#9ca3af')),
             ('VALIGN', (0,0), (-1,-1), 'TOP'),
             ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor('#f3f4f6')]),
-            ('LEFTPADDING', (0,0), (-1,-1), 2),
-            ('RIGHTPADDING', (0,0), (-1,-1), 2),
-            ('TOPPADDING', (0,0), (-1,-1), 2),
-            ('BOTTOMPADDING', (0,0), (-1,-1), 2),
-        ]))
-        story.append(table)
+            ('LEFTPADDING', (0,0), (-1,-1), 1.4),
+            ('RIGHTPADDING', (0,0), (-1,-1), 1.4),
+            ('TOPPADDING', (0,0), (-1,-1), 1.8),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 1.8),
+        ])
+
+        # Distribuição mais equilibrada: 16 ativos por página.
+        # Isso evita uma primeira página muito cheia e uma segunda quase vazia.
+        page_rows = 16
+        for index in range(0, len(rows), page_rows):
+            chunk = rows[index:index + page_rows]
+            data = [[cell(h) for h in headers]] + chunk
+            table = Table(data, repeatRows=1, colWidths=col_widths, hAlign='LEFT')
+            table.setStyle(table_style)
+            story.append(table)
+            if index + page_rows < len(rows):
+                story.append(PageBreak())
 
         doc = SimpleDocTemplate(
             buffer,
