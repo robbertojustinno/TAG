@@ -726,12 +726,18 @@ def equipment_report_pdf(payload: EquipmentReportPayload, _auth: CompanyContext 
         if category_title:
             report_title += f' - {category_title}'
 
+        centered_title = styles['Heading3'].clone('CenteredAssetListTitle')
+        centered_title.alignment = 1
+        centered_title.fontName = 'Helvetica-Bold'
         compact_header = Table([
             [
                 Paragraph('<b>TAGCHECK</b>', title_style),
-                Paragraph(f'<b>{company.name}</b><br/>{report_title}', styles['Heading3']),
                 Paragraph(
-                    f"Emissão: {time.strftime('%d/%m/%Y %H:%M:%S')}<br/>Quantidade: {len(items)}",
+                    f"<b>{company.name}</b><br/><para alignment='center'><b>{report_title}</b></para>",
+                    centered_title
+                ),
+                Paragraph(
+                    f"Emissão: {time.strftime('%d/%m/%y')}<br/>Quantidade: {len(items)}",
                     normal
                 )
             ]
@@ -744,7 +750,7 @@ def equipment_report_pdf(payload: EquipmentReportPayload, _auth: CompanyContext 
             ('TOPPADDING', (0,0), (-1,-1), 0),
             ('BOTTOMPADDING', (0,0), (-1,-1), 1),
         ]))
-        story.extend([compact_header, Spacer(1, 1.5*mm)])
+        story.extend([compact_header, Spacer(1, 4*mm)])
 
         from xml.sax.saxutils import escape
 
@@ -803,7 +809,7 @@ def equipment_report_pdf(payload: EquipmentReportPayload, _auth: CompanyContext 
 
         # Distribuição mais equilibrada: 16 ativos por página.
         # Isso evita uma primeira página muito cheia e uma segunda quase vazia.
-        page_rows = 24
+        page_rows = 27
         for index in range(0, len(rows), page_rows):
             chunk = rows[index:index + page_rows]
             data = [[cell(h) for h in headers]] + chunk
