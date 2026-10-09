@@ -722,23 +722,29 @@ def equipment_report_pdf(payload: EquipmentReportPayload, _auth: CompanyContext 
         title_style.fontSize = 14
 
         story = []
-        if getattr(company, 'logo_data', None):
-            story.append(ReportImage(BytesIO(company.logo_data), width=28*mm, height=11*mm, kind='proportional'))
-        story.append(Paragraph('TAGCHECK', title_style))
-        story.append(Paragraph(company.name, styles['Heading2']))
-
         report_title = 'LISTA DE ATIVOS'
         if category_title:
             report_title += f' - {category_title}'
-        story.extend([
-            Spacer(1, 2*mm),
-            Paragraph(report_title, styles['Heading2']),
-            Paragraph(
-                f"Emissão: {time.strftime('%d/%m/%Y %H:%M:%S')}  |  Quantidade: {len(items)}",
-                normal
-            ),
-            Spacer(1, 3*mm)
-        ])
+
+        compact_header = Table([
+            [
+                Paragraph('<b>TAGCHECK</b>', title_style),
+                Paragraph(f'<b>{company.name}</b><br/>{report_title}', styles['Heading3']),
+                Paragraph(
+                    f"Emissão: {time.strftime('%d/%m/%Y %H:%M:%S')}<br/>Quantidade: {len(items)}",
+                    normal
+                )
+            ]
+        ], colWidths=[42*mm, 165*mm, 70*mm])
+        compact_header.setStyle(TableStyle([
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            ('ALIGN', (2,0), (2,0), 'RIGHT'),
+            ('LEFTPADDING', (0,0), (-1,-1), 0),
+            ('RIGHTPADDING', (0,0), (-1,-1), 0),
+            ('TOPPADDING', (0,0), (-1,-1), 0),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 1),
+        ]))
+        story.extend([compact_header, Spacer(1, 1.5*mm)])
 
         from xml.sax.saxutils import escape
 
@@ -779,8 +785,8 @@ def equipment_report_pdf(payload: EquipmentReportPayload, _auth: CompanyContext 
         ]
 
         table_style = TableStyle([
-            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1f2937')),
-            ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#e5e7eb')),
+            ('TEXTCOLOR', (0,0), (-1,0), colors.HexColor('#111827')),
             ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
             ('ALIGN', (0,0), (0,-1), 'CENTER'),
             ('ALIGN', (9,1), (9,-1), 'CENTER'),
@@ -797,7 +803,7 @@ def equipment_report_pdf(payload: EquipmentReportPayload, _auth: CompanyContext 
 
         # Distribuição mais equilibrada: 16 ativos por página.
         # Isso evita uma primeira página muito cheia e uma segunda quase vazia.
-        page_rows = 16
+        page_rows = 24
         for index in range(0, len(rows), page_rows):
             chunk = rows[index:index + page_rows]
             data = [[cell(h) for h in headers]] + chunk
@@ -810,10 +816,10 @@ def equipment_report_pdf(payload: EquipmentReportPayload, _auth: CompanyContext 
         doc = SimpleDocTemplate(
             buffer,
             pagesize=page_size,
-            rightMargin=5*mm,
-            leftMargin=5*mm,
-            topMargin=8*mm,
-            bottomMargin=13*mm,
+            rightMargin=4*mm,
+            leftMargin=4*mm,
+            topMargin=4*mm,
+            bottomMargin=10*mm,
             title='TagCheck - Lista de Ativos'
         )
         doc.build(story, canvasmaker=_ReportCanvas)
