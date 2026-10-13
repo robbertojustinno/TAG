@@ -2,7 +2,7 @@ window.TAGCHECK_ADMIN_CONFIG = {
   APP_VERSION: '3.0.0',
   APP_NAME: 'TagCheck Admin',
   API_BASE_URL: 'https://tagcheck-fase2-hml-api.onrender.com',
-  VIEWER_BASE_URL: 'https://tagcheck-fase2-hml-viewer.onrender.com/',
+  VIEWER_BASE_URL: 'https://tagcheck.com.br/viewer/',
   CAMPO_BASE_URL: 'https://tagcheck-campo.onrender.com/',
   REQUEST_TIMEOUT_MS: 15000,
   STORAGE_KEYS: {
