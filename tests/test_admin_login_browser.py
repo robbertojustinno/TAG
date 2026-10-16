@@ -107,6 +107,10 @@ class AdminLoginBrowserTests(unittest.TestCase):
         self.page.locator('#selectCompanyButton').click()
 
     def test_calibration_dialog(self):
+        import json
+        with b.SessionLocal() as db:
+            db.add(b.Equipment(company_id=self.a,tag='CERT-SELECT',name='Instrumento de teste',photo='test-only',manufacturer='Fabricante teste',measurement_unit='bar',ema=1,calibration_record=json.dumps({'certificate_number':'CERT-123','results':[{'reference':'5','indicated':'4.9','input_unit':'bar','output_unit':'bar'}]})))
+            db.commit()
         self.login()
         expect(self.page.locator('#activeCompany')).to_have_text('Empresa: Empresa A')
         self.page.get_by_role("button", name="Certificado e leituras — abrir janela").first.click()
@@ -130,6 +134,20 @@ class AdminLoginBrowserTests(unittest.TestCase):
         expect(dialog.locator('[data-cert="certificate_number"]')).to_have_value('5220/2026')
         expect(dialog.locator('[data-key="reference"]')).to_have_value('49,42')
         dialog.locator('#certCancel').click()
+        self.page.get_by_role("button", name="Certificado e leituras — abrir janela").first.click()
+        dialog.locator('#certInstrument').select_option(label='CERT-SELECT — Instrumento de teste')
+        expect(dialog.locator('[data-cert="certificate_number"]')).to_have_value('CERT-123')
+        expect(dialog.locator('#certificateMetro_measurement_unit')).to_have_value('bar')
+        dialog.locator('#certClearReadings').click()
+        expect(dialog.locator('[data-key="reference"]')).to_have_value('5')
+        expect(dialog.locator('[data-key="indicated"]')).to_have_value('')
+        dialog.locator('[data-key="indicated"]').fill('5.2')
+        dialog.locator('#certSave').click()
+        expect(dialog).to_have_count(0)
+        with b.SessionLocal() as db:
+            item=db.query(b.Equipment).filter_by(tag='CERT-SELECT',company_id=self.a).one()
+            self.assertEqual(json.loads(item.calibration_record)['results'][0]['indicated'],'5.2')
+            self.assertEqual(item.manufacturer,'Fabricante teste')
 
     def test_single_company_enters_directly(self):
         self.login()
