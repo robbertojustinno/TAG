@@ -113,3 +113,4 @@ class Equipment(Base):
     resolution = Column(Numeric(24, 10), nullable=True)
     ema = Column(Numeric(24, 10), nullable=True)
     reading_contribution = Column(Numeric(24, 10), nullable=True)
+    calibration_record = Column(Text, nullable=True)

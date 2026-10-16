@@ -58,6 +58,7 @@
       category_id: field('createCategoryInput')
     };
     metroKeys.forEach(key => { payload[key] = field('createMetro_' + key); });
+    payload.calibration_record = JSON.stringify(state().createForm?.calibration_record || {});
     return payload;
   }
 
@@ -115,6 +116,7 @@
   function pendingItem(row) {
     return {
       id: row.local_id,
+      calibration_record: JSON.parse(row.payload?.calibration_record || '{}'),
       tag: row.payload?.tag || '-',
       name: row.payload?.name || 'Instrumento',
       photo: row.photo ? URL.createObjectURL(row.photo) : null,

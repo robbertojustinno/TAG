@@ -2,6 +2,7 @@
 from sqlalchemy import inspect, text
 
 FIELDS = {
+    "calibration_record": "TEXT",
     "measurand": "VARCHAR(200)",
     "measurement_unit": "VARCHAR(200)",
     "range_min": "NUMERIC(24, 10)",

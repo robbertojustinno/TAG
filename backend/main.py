@@ -50,6 +50,7 @@ CLOUDINARY_API_SECRET = required_env("CLOUDINARY_API_SECRET")
 SESSION_TTL_SECONDS = 8 * 60 * 60
 
 if __package__:
+    from .calibration_record import calibration_form, apply_record, read_record, master_pdf
     from .metrology import metrology_form, apply_metrology, serialize_metrology, LABELS as METROLOGY_LABELS
     from .models import Base, Company, Unit, User, UserCompany, Equipment, AssetCategory, DEFAULT_COMPANY_SLUG
     from .migrate_multiempresa import make_engine, migrate
@@ -58,6 +59,7 @@ if __package__:
     from .company_api import build_company_router
     from .category_api import build_category_router
 else:
+    from calibration_record import calibration_form, apply_record, read_record, master_pdf
     from metrology import metrology_form, apply_metrology, serialize_metrology, LABELS as METROLOGY_LABELS
     from models import Base, Company, Unit, User, UserCompany, Equipment, AssetCategory, DEFAULT_COMPANY_SLUG
     from migrate_multiempresa import make_engine, migrate
@@ -254,6 +256,7 @@ def serialize_equipment(item: Equipment) -> dict:
         "status": item.status or "Ativo",
         "notes": item.notes or "",
         **serialize_metrology(item),
+        "calibration_record": read_record(item),
         "qr_payload": build_qr_payload(item),
     }
     
@@ -303,6 +306,7 @@ async def create_equipment(
     status: str = Form("Ativo"),
     notes: str = Form(""),
     metrology: dict = Depends(metrology_form),
+    calibration: dict | None = Depends(calibration_form),
     _auth: CompanyContext = Depends(auth.writer),
 ):
     tag = tag.strip().upper()
@@ -343,6 +347,7 @@ async def create_equipment(
             notes=notes.strip(),
         )
         apply_metrology(item, metrology)
+        apply_record(item, calibration)
         db.add(item)
         db.commit()
         db.refresh(item)
@@ -467,6 +472,7 @@ async def update_equipment(
     status: str = Form("Ativo"),
     notes: str = Form(""),
     metrology: dict = Depends(metrology_form),
+    calibration: dict | None = Depends(calibration_form),
     _auth: CompanyContext = Depends(auth.writer),
 ):
     db = SessionLocal()
@@ -492,6 +498,7 @@ async def update_equipment(
             raise HTTPException(status_code=400, detail="TAG jÃ¡ cadastrada em outro equipamento.")
 
         apply_metrology(item, metrology)
+        apply_record(item, calibration)
         item.tag = tag
         item.name = name.strip()
         item.equipment_type = equipment_type.strip()
@@ -868,3 +875,14 @@ def temporary_pdf(request: Request, pdf_token: str = Form(..., max_length=8192))
     context = auth.from_token(pdf_token, purpose="pdf")
     auth.check_company_hint(request, context)
     return equipment_pdf_labels(context)
+
+
+@app.get("/equipment/{id}/master-report-pdf", response_class=StreamingResponse)
+def instrument_master_report(id: int, _auth: CompanyContext = Depends(auth.current)):
+    with SessionLocal() as db:
+        item = equipment_query(db, _auth).filter(Equipment.id == id).first()
+        if not item:
+            raise HTTPException(404, 'Instrumento não encontrado')
+        company = db.get(Company, item.company_id)
+        return StreamingResponse(master_pdf(item, company.name), media_type='application/pdf',
+            headers={'Content-Disposition': 'attachment; filename="relatorio-mestre.pdf"', 'Cache-Control':'no-store'})

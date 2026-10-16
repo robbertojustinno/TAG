@@ -393,6 +393,7 @@ function canManageUnits() {
 function normalizeItem(raw) {
   return {
     ...metrologyValues(raw),
+    calibration_record: typeof raw.calibration_record === 'string' ? JSON.parse(raw.calibration_record || '{}') : (raw.calibration_record || {}),
     id: raw.id ?? null,
     tag: raw.tag ?? '-',
     name: raw.name ?? 'Instrumento',
@@ -817,13 +818,14 @@ function createAdditionalFields(prefix, values) {
       <label>Categoria<select id="${prefix}CategoryInput" class="input"><option value="">Sem categoria</option>${categoryOptions(values.category_id || '')}</select></label>
       <input id="${prefix}NotesInput" class="input" placeholder="${t('notes')}" value="${escapeHtml(values.notes || '')}" />
     </div>
-    ${prefix === 'edit' ? metrologyHtml(prefix, values) : ''}
+    ${prefix === 'edit' ? metrologyHtml(prefix, values) : ''}<button type="button" class="outline-button" onclick="openCalibration('${prefix}')">Certificado e leituras — abrir janela</button>
   `;
 }
 
 function renderEditableRow(item) {
   const draft = state.editDraft || {
     ...metrologyValues(item),
+    calibration_record: item.calibration_record || {},
     tag: item.tag,
     name: item.name,
     equipment_type: item.equipment_type || '',
@@ -888,7 +890,7 @@ function renderRows(items) {
 
     const actions = item.offline_pending
       ? `<span class="muted">${escapeHtml(item.offline_status === 'sync_error' ? 'Erro — tentar sincronizar' : 'Aguardando internet')}</span>`
-      : `${canWriteEquipment() ? `<button class="secondary-button" onclick="startEditItem(${item.id})">${t('edit')}</button>` : ''}${canDeleteEquipment() ? `<button class="danger-button" onclick="askDeleteItem(${item.id})">${t('delete')}</button>` : ''}`;
+      : `<button class="secondary-button" onclick="downloadMasterReport(${item.id})">Relatório mestre</button>${canWriteEquipment() ? `<button class="secondary-button" onclick="startEditItem(${item.id})">${t('edit')}</button>` : ''}${canDeleteEquipment() ? `<button class="danger-button" onclick="askDeleteItem(${item.id})">${t('delete')}</button>` : ''}`;
 
     return `
       <tr>
@@ -1281,6 +1283,7 @@ function bindEvents() {
     formData.append('sector', state.createForm.sector);
     formData.append('location', state.createForm.location);
     METROLOGY_FIELDS.forEach(([key]) => formData.append(key, state.createForm[key] ?? ''));
+    formData.append('calibration_record', JSON.stringify(state.createForm.calibration_record || {}));
     formData.append('manufacturer', state.createForm.manufacturer);
     formData.append('model', state.createForm.model);
     formData.append('serial_number', state.createForm.serial_number);
@@ -1425,6 +1428,7 @@ function bindEvents() {
     form.append('sector', state.editDraft.sector || '');
     form.append('location', state.editDraft.location || '');
     METROLOGY_FIELDS.forEach(([key]) => form.append(key, readMetrology('edit')[key]));
+    form.append('calibration_record', JSON.stringify(state.editDraft.calibration_record || {}));
     form.append('manufacturer', state.editDraft.manufacturer || '');
     form.append('model', state.editDraft.model || '');
     form.append('serial_number', state.editDraft.serial_number || '');
@@ -1502,6 +1506,7 @@ window.startEditItem = function(id) {
   state.deleteTargetId = null;
   state.editDraft = {
     ...metrologyValues(item),
+    calibration_record: item.calibration_record || {},
     tag: item.tag,
     name: item.name,
     equipment_type: item.equipment_type || '',

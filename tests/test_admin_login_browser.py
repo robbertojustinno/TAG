@@ -106,6 +106,31 @@ class AdminLoginBrowserTests(unittest.TestCase):
         self.page.locator('#companySelect').select_option(str(company))
         self.page.locator('#selectCompanyButton').click()
 
+    def test_calibration_dialog(self):
+        self.login()
+        expect(self.page.locator('#activeCompany')).to_have_text('Empresa: Empresa A')
+        self.page.get_by_role("button", name="Certificado e leituras — abrir janela").first.click()
+        dialog=self.page.locator('dialog')
+        expect(dialog).to_be_visible()
+        dialog.locator('[data-cert="certificate_number"]').fill('5220/2026')
+        dialog.locator('#certificateMetro_range_min').fill('0')
+        dialog.locator('#certificateMetro_range_max').fill('100')
+        dialog.locator('#certificateMetro_accuracy_class').fill('1')
+        dialog.locator('#certificateMetro_measurement_unit').fill('°C')
+        dialog.locator('#certificateCalculateEma').click()
+        expect(dialog.locator('#certificateMetro_ema')).to_have_value('1')
+        dialog.locator('[data-add="results"]').click()
+        for key,value in {'reference':'49,42','indicated':'42','input_unit':'°C','output_unit':'°C'}.items():
+            dialog.locator(f'[data-table="results"][data-key="{key}"]').fill(value)
+        dialog.locator('#certCalculate').click()
+        expect(dialog.locator('#certFeedback')).to_contain_text('Não conforme')
+        dialog.locator('#certSave').click()
+        expect(dialog).to_have_count(0)
+        self.page.get_by_role("button", name="Certificado e leituras — abrir janela").first.click()
+        expect(dialog.locator('[data-cert="certificate_number"]')).to_have_value('5220/2026')
+        expect(dialog.locator('[data-key="reference"]')).to_have_value('49,42')
+        dialog.locator('#certCancel').click()
+
     def test_single_company_enters_directly(self):
         self.login()
         expect(self.page.locator('#activeCompany')).to_have_text('Empresa: Empresa A')
