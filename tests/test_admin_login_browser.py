@@ -123,7 +123,6 @@ class AdminLoginBrowserTests(unittest.TestCase):
         dialog.locator('#certificateMetro_measurement_unit').fill('°C')
         dialog.locator('#certificateCalculateEma').click()
         expect(dialog.locator('#certificateMetro_ema')).to_have_value('1')
-        dialog.locator('[data-add="results"]').click()
         for key,value in {'reference':'49,42','indicated':'42','input_unit':'°C','output_unit':'°C'}.items():
             dialog.locator(f'[data-table="results"][data-key="{key}"]').fill(value)
         dialog.locator('#certCalculate').click()

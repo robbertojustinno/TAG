@@ -870,3 +870,8 @@ select option {
 .calibration-dialog select option { background: var(--bg-2); color: var(--text); }
 .calibration-summary { margin: 16px 0; }
 .calibration-summary input[readonly] { opacity: .8; }
+
+.calibration-points table { min-width: 950px; width: 100%; }
+.calibration-points td { padding: 6px; }
+.calibration-points .input { min-width: 90px; width: 100%; padding: 9px; }
+.calibration-points th { white-space: nowrap; }

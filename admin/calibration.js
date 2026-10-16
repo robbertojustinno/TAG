@@ -1,14 +1,16 @@
 const CERT_FIELDS = {"document_type": "Tipo de documento", "certificate_number": "Número do certificado / CIE", "issue_date": "Data de emissão", "laboratory": "Laboratório emissor", "requester": "Solicitante", "procedure": "Procedimento / método", "temperature": "Temperatura ambiente", "humidity": "Umidade relativa", "observations": "Observações / falha constatada", "conclusion": "Conclusão / condição técnica", "approved_by": "Responsável / signatário informado", "approval_date": "Data da aprovação informada"};
-const CERT_TABLES = {"standards": {"identification": "Padrão utilizado", "serial": "Série", "certificate": "Certificado", "laboratory": "Laboratório", "calibration_date": "Calibração", "valid_until": "Validade"}, "results": {"reference": "Referência / entrada", "input_unit": "Unidade de entrada", "indicated": "Indicação / saída", "output_unit": "Unidade de saída", "uncertainty": "Incerteza expandida", "k": "k"}};
+const CERT_TABLES = {"standards": {"identification": "Padrão utilizado", "serial": "Série", "certificate": "Certificado", "laboratory": "Laboratório", "calibration_date": "Calibração", "valid_until": "Validade"}, "results": {"reference": "Entrada", "input_unit": "Grandeza", "indicated": "Valor de saída", "output_unit": "Tipo de saída", "low": "Baixo", "high": "Alto", "uncertainty": "Incerteza (U)", "k": "k"}};
+const CERT_POINT_FIELDS = {"span_accuracy": "Exatidão do intervalo (%)", "reading_accuracy": "Exatidão das leituras (%)", "declared_accuracy": "Exatidão declarada", "plus_minus": "Mais / menos", "input_range": "Faixa de entrada", "output_range": "Faixa de saída"};
 
 window.openCalibration = function(prefix, selected = null, instrumentOptions = null) {
  const target = selected || (prefix === 'create' ? state.createForm : state.editDraft);
  const companyId = state.companyId;
  const record = structuredClone(target.calibration_record || {});
+ if(!record.results?.length) record.results=[{input_unit:target.measurement_unit || '',output_unit:target.measurement_unit || ''}];
  const dialog = document.createElement('dialog');
  dialog.className = 'calibration-dialog';
  const field = (key,label,value) => key === 'document_type' ? `<label>${escapeHtml(label)}<select class="input" data-cert="document_type">${['','Certificado de calibração','Carta de inspeção'].map(option=>`<option ${option===(value || '')?'selected':''}>${option}</option>`).join('')}</select></label>` : `<label>${escapeHtml(label)}<input class="input" data-cert="${key}" value="${escapeHtml(value || '')}"></label>`;
- dialog.innerHTML = `<h2>Certificado e leituras do instrumento</h2><label>Selecionar instrumento cadastrado<select id="certInstrument" class="input"><option value="">${prefix === 'edit' ? 'Usar o cadastro em edição' : 'Usar o novo cadastro'}</option></select></label><p id="certInstrumentStatus" role="status">Carregando instrumentos da empresa…</p><div class="grid-2 calibration-summary">${[['tag','TAG'],['name','Descrição'],['manufacturer','Fabricante'],['model','Modelo'],['serial_number','Número de série'],['equipment_type','Tipo'],['sector','Setor'],['location','Localização'],['status','Status'],['calibration_date','Última calibração'],['next_calibration_date','Próxima calibração']].map(([key,label])=>`<label>${label}<input class="input" readonly value="${escapeHtml(target[key] || '')}"></label>`).join('')}</div><p>Preencha os dados do certificado e os valores lidos. Use a mesma unidade para referência e indicação. Carta de inspeção registra falhas, sem avaliação de calibração.</p><div class="grid-2">${Object.entries(CERT_FIELDS).map(([k,l])=>field(k,l,record[k])).join('')}</div><h3>Critério metrológico do instrumento</h3>${metrologyHtml('certificate',target)}<p>Erro = indicação − referência. A verificação usa |erro| ≤ EMA, sem considerar incerteza. A incerteza e k devem vir do certificado ou de avaliação própria.</p><div id="certTables"></div><button type="button" id="certCalculate">Calcular erros e avaliar pontos</button><div id="certFeedback" role="status"></div><button type="button" id="certClearReadings">Limpar leituras para nova medição</button> <button type="button" id="certSave">${selected ? "Salvar no instrumento selecionado" : "Aplicar ao cadastro"}</button> <button type="button" id="certCancel">Cancelar</button>`;
+ dialog.innerHTML = `<h2>Certificado e leituras do instrumento</h2><label>Selecionar instrumento cadastrado<select id="certInstrument" class="input"><option value="">${prefix === 'edit' ? 'Usar o cadastro em edição' : 'Usar o novo cadastro'}</option></select></label><p id="certInstrumentStatus" role="status">Carregando instrumentos da empresa…</p><div class="grid-2 calibration-summary">${[['tag','TAG'],['name','Descrição'],['manufacturer','Fabricante'],['model','Modelo'],['serial_number','Número de série'],['equipment_type','Tipo'],['sector','Setor'],['location','Localização'],['status','Status'],['calibration_date','Última calibração'],['next_calibration_date','Próxima calibração']].map(([key,label])=>`<label>${label}<input class="input" readonly value="${escapeHtml(target[key] || '')}"></label>`).join('')}</div><p>Preencha os dados do certificado e os valores lidos. Use a mesma unidade para referência e indicação. Carta de inspeção registra falhas, sem avaliação de calibração.</p><div class="grid-2">${Object.entries(CERT_FIELDS).map(([k,l])=>field(k,l,record[k])).join('')}</div><h3>Critério metrológico do instrumento</h3>${metrologyHtml('certificate',target)}<p>Erro = indicação − referência. A verificação usa |erro| ≤ EMA, sem considerar incerteza. A incerteza e k devem vir do certificado ou de avaliação própria.</p><h3>Parâmetros dos pontos de medição</h3><div class="grid-2">${Object.entries(CERT_POINT_FIELDS).map(([k,l])=>field(k,l,record[k])).join('')}</div><div id="certTables"></div><button type="button" id="certCalculate">Calcular limites, erros e avaliar pontos</button><div id="certFeedback" role="status"></div><button type="button" id="certClearReadings">Limpar leituras para nova medição</button> <button type="button" id="certSave">${selected ? "Salvar no instrumento selecionado" : "Aplicar ao cadastro"}</button> <button type="button" id="certCancel">Cancelar</button>`;
  document.body.append(dialog);
  const selector = dialog.querySelector('#certInstrument');
  const status = dialog.querySelector('#certInstrumentStatus');
@@ -33,7 +35,12 @@ window.openCalibration = function(prefix, selected = null, instrumentOptions = n
  }
  loadInstrumentOptions();
  function tables() {
-  dialog.querySelector('#certTables').innerHTML=Object.entries(CERT_TABLES).map(([kind,columns])=>`<h3>${kind==='results'?'Pontos de medição':'Padrões utilizados'}</h3>${(record[kind] || []).map((row,i)=>`<fieldset><legend>${i+1}</legend><div class="grid-2">${Object.entries(columns).map(([k,l])=>`<label>${escapeHtml(l)}<input class="input" data-table="${kind}" data-row="${i}" data-key="${k}" value="${escapeHtml(row[k] || '')}"></label>`).join('')}</div><button type="button" data-remove="${kind}" data-index="${i}">Remover linha</button></fieldset>`).join('')}<button type="button" data-add="${kind}">Adicionar ${kind==='results'?'ponto':'padrão'}</button>`).join('');
+  const cell=(kind,row,i,k,label)=>`<input class="input" aria-label="${escapeHtml(label)} — linha ${i+1}" data-table="${kind}" data-row="${i}" data-key="${k}" value="${escapeHtml(row[k] || '')}">`;
+  dialog.querySelector('#certTables').innerHTML=Object.entries(CERT_TABLES).map(([kind,columns])=>{
+   const rows=record[kind] || [];
+   if(kind==='results') return `<h3>Pontos de medição</h3><p class="muted">Em Grandeza, informe a unidade da entrada (ex.: kgf/cm², °C, bar). Baixo e Alto = valor de saída ± EMA, na mesma unidade.</p><div class="table-wrap calibration-points"><table><thead><tr>${Object.values(columns).map(label=>`<th>${escapeHtml(label)}</th>`).join('')}<th>Ação</th></tr></thead><tbody>${rows.map((row,i)=>`<tr>${Object.entries(columns).map(([k,label])=>`<td>${cell(kind,row,i,k,label)}</td>`).join('')}<td><button type="button" data-remove="results" data-index="${i}" aria-label="Remover ponto ${i+1}">Remover</button></td></tr>`).join('')}</tbody></table></div><button type="button" data-add="results">Adicionar ponto</button>`;
+   return `<h3>Padrões utilizados</h3>${rows.map((row,i)=>`<fieldset><legend>${i+1}</legend><div class="grid-2">${Object.entries(columns).map(([k,label])=>`<label>${escapeHtml(label)}${cell(kind,row,i,k,label)}</label>`).join('')}</div><button type="button" data-remove="${kind}" data-index="${i}">Remover linha</button></fieldset>`).join('')}<button type="button" data-add="standards">Adicionar padrão</button>`;
+  }).join('');
  }
  tables();
  dialog.addEventListener('input',e=>{const el=e.target;if(el.dataset.table)record[el.dataset.table][Number(el.dataset.row)][el.dataset.key]=el.value;});
@@ -49,19 +56,22 @@ window.openCalibration = function(prefix, selected = null, instrumentOptions = n
   const inspection=dialog.querySelector('[data-cert="document_type"]').value.trim().toLowerCase()==='carta de inspeção';
   dialog.querySelector('#certFeedback').textContent=(record.results || []).map((r,i)=>{
    const ref=num(r.reference || ''),ind=num(r.indicated || ''),a=(r.input_unit || '').trim().toLowerCase(),b=(r.output_unit || '').trim().toLowerCase();
+   if(!inspection&&Number.isFinite(ind)&&Number.isFinite(ema)&&ema>=0&&unit===b){r.low=String(Number((ind-ema).toFixed(10)));r.high=String(Number((ind+ema).toFixed(10)));}
    if(![ref,ind].every(Number.isFinite)||!a||a!==b)return `Ponto ${i+1}: informe números e unidades iguais.`;
    const error=Number((ind-ref).toFixed(10));
    return `Ponto ${i+1}: erro ${error} ${r.output_unit}. ${!inspection&&Number.isFinite(ema)&&ema>=0&&unit===b?(Math.abs(error)<=ema?'Conforme':'Não conforme'):'Não avaliado: confira EMA, unidade e tipo do documento.'}`;
   }).join(' | ');
+  tables();
  };
  dialog.querySelector('#certClearReadings').onclick=()=>{
-  (record.results || []).forEach(row=>{row.indicated='';row.error='';});
+  (record.results || []).forEach(row=>{row.indicated='';row.error='';row.low='';row.high='';});
   tables();dialog.querySelector('#certFeedback').textContent='Leituras limpas nesta janela. As referências e os demais dados foram mantidos.';
  };
  dialog.querySelector('#certSave').onclick=async()=>{
   if (state.companyId !== companyId) { status.textContent='A empresa ativa mudou. Feche e abra a janela novamente.';return; }
 
   dialog.querySelectorAll('[data-cert]').forEach(el=>record[el.dataset.cert]=el.value.trim());
+  record.results=(record.results || []).filter(row=>Object.entries(row).some(([key,value])=>!['input_unit','output_unit'].includes(key)&&String(value || '').trim()));
   const metrology = readMetrology('certificate');
   if (selected) {
    const button=dialog.querySelector('#certSave');button.disabled=true;
