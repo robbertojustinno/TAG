@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tagcheck-viewer-metrology-v1';
+const CACHE_NAME = 'tagcheck-viewer-readable-details-v1';
 const APP_SHELL = [
   './',
   './index.html',

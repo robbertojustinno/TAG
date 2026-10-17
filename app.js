@@ -87,13 +87,13 @@ function normalizeEquipment(raw) {
     id: source.id ?? source.instrument_id ?? source.equipment_id ?? source.asset_id ?? null,
     tag: source.tag ?? source.codigo ?? source.code ?? source.patrimonio ?? source.asset_code ?? source.instrument_tag ?? '-',
     name: source.name ?? source.nome ?? source.description ?? source.descricao ?? source.instrumento ?? source.equipment_name ?? 'Instrumento',
-    type: source.type ?? source.tipo ?? source.category ?? source.categoria ?? '-',
+    type: source.equipment_type ?? source.type ?? source.tipo ?? source.category ?? source.categoria ?? '-',
     serial: source.serial ?? source.serial_number ?? source.numero_serie ?? '-',
     sector: source.sector ?? source.setor ?? source.area ?? source.location_sector ?? '-',
     location: source.location ?? source.localizacao ?? source.local ?? source.room ?? '-',
     status: source.status ?? source.situacao ?? source.condition ?? '-',
     calibrationDate: source.calibration_date ?? source.data_calibracao ?? source.last_calibration ?? '-',
-    validityDate: source.validity_date ?? source.data_validade ?? source.next_due_date ?? source.expiration_date ?? '-',
+    validityDate: source.next_calibration_date ?? source.validity_date ?? source.data_validade ?? source.next_due_date ?? source.expiration_date ?? '-',
     manufacturer: source.manufacturer ?? source.fabricante ?? '-',
     model: source.model ?? source.modelo ?? '-',
     range: source.range ?? source.faixa ?? '-',
@@ -613,6 +613,19 @@ function renderManualQr() {
   document.getElementById('goToScanner')?.addEventListener('click', renderScanner);
 }
 
+function technicalDetails(item) {
+  const raw = item.raw || {};
+  const fields = [
+    ['Unidade organizacional', raw.unit_name],
+    ['Faixa de indicação', raw.range ?? raw.faixa],
+    ['Tipo de saída', raw.output_type],
+    ['Sinal de saída', raw.output_signal],
+  ].filter(([, value]) => (typeof value === 'string' || typeof value === 'number')
+    && String(value).trim() !== '' && value !== '-');
+  if (!fields.length) return '';
+  return `<div class="card panel"><h3>Dados técnicos</h3><div class="meta-grid">${fields.map(([label, value]) => metaItem(label, value)).join('')}</div></div>`;
+}
+
 function renderDetail(item, noticeText = '') {
   destroyScanner();
   state.screen = 'detail';
@@ -666,10 +679,7 @@ function renderDetail(item, noticeText = '') {
         </div>
       </div>
 
-      <div class="card panel">
-        <h3>Dados técnicos</h3>
-        <div class="code-block">${escapeHtml(JSON.stringify(itemSafe.raw, null, 2))}</div>
-      </div>
+      ${technicalDetails(itemSafe)}
 
       ${notesBlock}
       ${rawFallbackBlock}
