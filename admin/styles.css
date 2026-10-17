@@ -885,3 +885,22 @@ select option {
 .field-help-text { position: absolute; right: 0; top: 29px; z-index: 20; width: min(260px, 65vw); padding: 12px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--bg-2); color: var(--text); font-size: 13px; line-height: 1.5; box-shadow: 0 8px 24px #0008; white-space: normal; text-align: left; }
 .calibration-points th { min-width: 120px; }
 .calibration-points .field-help-text { position: static; display: block; width: 180px; margin-top: 6px; }
+
+/* Workspace header: identity, language and actions remain distinct at every size. */
+.topbar { padding:20px 22px; gap:24px; border-radius:24px; border-color:rgba(96,165,250,.18); background:linear-gradient(115deg,#0e1c32,#081323 70%); box-shadow:0 12px 32px rgba(0,0,0,.2); }
+.topbar .brand { gap:14px; flex:1 1 280px; }
+.topbar .brand-logo { width:64px; height:64px; flex-shrink:0; object-fit:contain; border-radius:16px; box-shadow:0 6px 20px rgba(0,0,0,.25); }
+.topbar .brand h1 { font-size:1.35rem; letter-spacing:.035em; line-height:1.25; }
+.topbar .brand p { line-height:1.45; overflow-wrap:anywhere; }
+.topbar #activeCompany { margin-top:7px; color:#c6d9f5; font-size:.84rem; }
+.topbar #activeUserProfile { font-size:.75rem; color:#91a9ca; max-width:380px; }
+.topbar-actions { gap:14px; flex-shrink:0; justify-content:flex-end; }
+.language-switch { display:flex; gap:3px; padding:4px; border:1px solid var(--line-strong); border-radius:12px; background:rgba(0,0,0,.18); }
+.topbar .language-switch .lang-button { min-width:36px; min-height:34px; padding:7px 9px; border:0; border-radius:8px; box-shadow:none; font-size:.75rem; }
+.workspace-actions { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.topbar .workspace-actions a,.topbar .workspace-actions button,.topbar #logoutButton { display:inline-flex; align-items:center; justify-content:center; min-height:42px; padding:10px 14px; font-size:.8rem; line-height:1.25; border-radius:11px; white-space:nowrap; }
+.topbar #openCampoButton { background:linear-gradient(135deg,#2563eb,#4287f5); box-shadow:0 5px 14px rgba(37,99,235,.2); }
+.topbar #logoutButton { color:#f0b8be; border-color:rgba(239,68,68,.23); background:rgba(239,68,68,.06); }
+.topbar button:focus-visible,.topbar a:focus-visible { outline:2px solid #93c5fd; outline-offset:3px; }
+@media(max-width:1100px) { .topbar { flex-wrap:wrap; } .topbar-actions { flex:1 1 100%; justify-content:space-between; padding-top:14px; border-top:1px solid var(--line); } .workspace-actions { margin-left:auto; } }
+@media(max-width:600px) { .topbar { padding:16px; gap:16px; } .topbar .brand-logo { width:52px; height:52px; } .topbar .brand h1 { font-size:1.15rem; } .topbar-actions { gap:12px; } .workspace-actions { order:3; width:100%; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); margin:0; } .workspace-actions a,.workspace-actions button { white-space:normal!important; } }
