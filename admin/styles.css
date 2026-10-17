@@ -904,3 +904,21 @@ select option {
 .topbar button:focus-visible,.topbar a:focus-visible { outline:2px solid #93c5fd; outline-offset:3px; }
 @media(max-width:1100px) { .topbar { flex-wrap:wrap; } .topbar-actions { flex:1 1 100%; justify-content:space-between; padding-top:14px; border-top:1px solid var(--line); } .workspace-actions { margin-left:auto; } }
 @media(max-width:600px) { .topbar { padding:16px; gap:16px; } .topbar .brand-logo { width:52px; height:52px; } .topbar .brand h1 { font-size:1.15rem; } .topbar-actions { gap:12px; } .workspace-actions { order:3; width:100%; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); margin:0; } .workspace-actions a,.workspace-actions button { white-space:normal!important; } }
+
+:root { color-scheme:dark; }
+:root[data-theme="light"] { color-scheme:light; --bg:#f3f6fb; --bg-2:#eaf0f8; --panel:#ffffff; --panel-2:#f8faff; --line:rgba(15,35,65,.12); --line-strong:rgba(15,35,65,.24); --text:#172b46; --muted:#49617f; --accent:#1d4ed8; --accent-2:#2563eb; --shadow:0 14px 40px rgba(24,47,80,.09); --shadow-soft:0 6px 20px rgba(24,47,80,.07); }
+[data-theme="light"] .topbar { background:linear-gradient(115deg,#fff,#eef4ff); border-color:#cbd8ec; }
+[data-theme="light"] .topbar #activeCompany { color:#284b78; }
+[data-theme="light"] .topbar #activeUserProfile { color:#49617f; }
+[data-theme="light"] .language-switch { background:#e5edf9; }
+[data-theme="light"] .secondary-button { background:#e6edf8; border-color:#cbd8ec; }
+[data-theme="light"] .lang-button.active { background:#1d4ed8; color:#fff; }
+[data-theme="light"] .input,[data-theme="light"] .file-input { background:#fff; color:#172b46; border-color:#b8c8dd; }
+[data-theme="light"] .input::placeholder { color:#60728a; }
+[data-theme="light"] .category-menu,[data-theme="light"] .category-modal { background:#f8faff; border-color:#bdcce0; }
+[data-theme="light"] .category-menu button { color:#172b46; }
+[data-theme="light"] .category-menu button:hover { background:#e6edf8; }
+[data-theme="light"] .category-name.selected { color:#173f87; background:#dbeafe; }
+[data-theme="light"] .calibration-dialog { color-scheme:light; }
+[data-theme="light"] .topbar #logoutButton { color:#a51c31; background:#fff2f3; }
+#themeToggle { min-height:42px; padding:10px 12px; border-radius:11px; white-space:nowrap; }
