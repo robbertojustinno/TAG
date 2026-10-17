@@ -875,3 +875,13 @@ select option {
 .calibration-points td { padding: 6px; }
 .calibration-points .input { min-width: 90px; width: 100%; padding: 9px; }
 .calibration-points th { white-space: nowrap; }
+
+/* Ajuda por campo acessível por clique, toque e teclado. */
+.field-caption { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.field-help { position: relative; display: inline-block; flex: 0 0 auto; font-weight: normal; }
+.field-help summary { list-style: none; cursor: pointer; display: grid; place-items: center; border: 1px solid var(--line-strong); border-radius: 50%; width: 24px; height: 24px; color: var(--muted); font-size: 13px; }
+.field-help summary::-webkit-details-marker { display: none; }
+.field-help summary:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.field-help-text { position: absolute; right: 0; top: 29px; z-index: 20; width: min(260px, 65vw); padding: 12px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--bg-2); color: var(--text); font-size: 13px; line-height: 1.5; box-shadow: 0 8px 24px #0008; white-space: normal; text-align: left; }
+.calibration-points th { min-width: 120px; }
+.calibration-points .field-help-text { position: static; display: block; width: 180px; margin-top: 6px; }
