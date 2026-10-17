@@ -6,7 +6,7 @@ const METROLOGY_HINTS = {
   ema: 'Ex.: 12,6', reading_contribution: 'Ex.: 5'
 };
 const METROLOGY_HELP = {
- measurand:'Propriedade medida pelo instrumento, como pressão ou temperatura.',measurement_unit:'Unidade usada para expressar a medição. Selecione uma opção ou digite outra.',range_min:'Menor valor da faixa de medição do instrumento.',range_max:'Maior valor da faixa de medição. Deve ser maior ou igual ao mínimo.',accuracy_class:'Classe informada pelo fabricante. No cálculo percentual, a classe é aplicada à amplitude da faixa.',resolution:'Menor variação que o instrumento consegue indicar, na unidade de medição.',ema:'Erro máximo admissível. Pode ser informado manualmente ou calculado pela amplitude e classe percentual.',reading_contribution:'Contribuição estimada da leitura, na unidade de medição, conforme o método adotado. Não é calculada automaticamente.'
+ measurand:'Propriedade medida pelo instrumento, como pressão ou temperatura.',measurement_unit:'Unidade usada para expressar a medição. Selecione uma unidade disponível na lista.',range_min:'Menor valor da faixa de medição do instrumento.',range_max:'Maior valor da faixa de medição. Deve ser maior ou igual ao mínimo.',accuracy_class:'Classe informada pelo fabricante. No cálculo percentual, a classe é aplicada à amplitude da faixa.',resolution:'Menor variação que o instrumento consegue indicar, na unidade de medição.',ema:'Erro máximo admissível. Pode ser informado manualmente ou calculado pela amplitude e classe percentual.',reading_contribution:'Contribuição estimada da leitura, na unidade de medição, conforme o método adotado. Não é calculada automaticamente.'
 };
 function fieldHelp(label, explanation) {
  return `<span class="field-caption"><span>${escapeHtml(label)}</span><details class="field-help"><summary aria-label="${escapeHtml('Ajuda sobre ' + label)}" title="${escapeHtml(explanation)}">?</summary><span class="field-help-text">${escapeHtml(explanation)}</span></details></span>`;
@@ -20,10 +20,16 @@ function readMetrology(prefix) {
 }
 function metrologyHtml(prefix, values) {
   return `<fieldset class="metrology-block"><legend>Dados Metrológicos</legend><div class="metrology-grid">
-    ${METROLOGY_FIELDS.map(([key, label]) => `<label>${fieldHelp(label, METROLOGY_HELP[key])}<input id="${prefix}Metro_${key}" class="input" ${METROLOGY_OPTIONS[key] ? `list="${prefix}MetroOptions_${key}"` : ''} placeholder="${escapeHtml(METROLOGY_HINTS[key])}" ${['measurand','measurement_unit','accuracy_class'].includes(key) ? '' : 'inputmode="decimal"'} value="${escapeHtml(values[key] ?? '')}" /></label>`).join('')}
+    ${METROLOGY_FIELDS.map(([key, label]) => {
+      const value = String(values[key] ?? '');
+      const options = METROLOGY_OPTIONS[key];
+      const control = options ? `<select id="${prefix}Metro_${key}" class="input"><option value="">Selecione…</option>${[...new Set([...options, ...(value ? [value] : [])])].map(option => `<option value="${escapeHtml(option)}" ${option === value ? 'selected' : ''}>${escapeHtml(option)}</option>`).join('')}</select>` : `<input id="${prefix}Metro_${key}" class="input" placeholder="${escapeHtml(METROLOGY_HINTS[key])}" ${key === 'accuracy_class' ? '' : 'inputmode="decimal"'} value="${escapeHtml(value)}" />`;
+      return `<label>${fieldHelp(label, METROLOGY_HELP[key])}${control}</label>`;
+    }).join('')}
+
   </div>
   ${Object.entries(METROLOGY_OPTIONS).map(([key, options]) => `<datalist id="${prefix}MetroOptions_${key}">${options.map(value => `<option value="${escapeHtml(value)}"></option>`).join('')}</datalist>`).join('')}
-  <small>Grandeza e unidade: selecione na lista ou digite um valor personalizado.</small>
+  <small>Grandeza e unidade: selecione uma opção da lista.</small>
   <button type="button" id="${prefix}CalculateEma" class="outline-button">Calcular EMA pela classe (%)</button>
   <small>EMA = (faixa máxima − faixa mínima) × classe / 100. O valor pode ser informado manualmente.</small>
   <div id="${prefix}MetroFeedback" role="status"></div></fieldset>`;

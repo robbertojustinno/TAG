@@ -55,7 +55,15 @@ window.openCalibration = function(prefix, selected = null, instrumentOptions = n
  }
  loadInstrumentOptions();
  function tables() {
-  const cell=(kind,row,i,k,label)=>`<input class="input" aria-label="${escapeHtml(label)} — linha ${i+1}" data-table="${kind}" data-row="${i}" data-key="${k}" title="${escapeHtml(CERT_TABLE_HELP[kind]?.[k] || label)}" placeholder="${escapeHtml(CERT_TABLE_EXAMPLES[kind]?.[k] || '')}" value="${escapeHtml(row[k] || '')}">`;
+  const cell=(kind,row,i,k,label)=>{
+   const attrs=`class="input" aria-label="${escapeHtml(label)} — linha ${i+1}" data-table="${kind}" data-row="${i}" data-key="${k}" title="${escapeHtml(CERT_TABLE_HELP[kind]?.[k] || label)}"`;
+   if(kind === 'results' && ['input_unit','output_unit'].includes(k)) {
+    const value=String(row[k] ?? '');
+    const options=[...new Set([...METROLOGY_OPTIONS.measurement_unit, target.measurement_unit, ...((record.results || []).flatMap(point=>[point.input_unit,point.output_unit]))].filter(Boolean))];
+    return `<select ${attrs}><option value="">Selecione…</option>${options.map(option=>`<option value="${escapeHtml(option)}" ${option===value?'selected':''}>${escapeHtml(option)}</option>`).join('')}</select>`;
+   }
+   return `<input ${attrs} placeholder="${escapeHtml(CERT_TABLE_EXAMPLES[kind]?.[k] || '')}" value="${escapeHtml(row[k] ?? '')}">`;
+  };
   dialog.querySelector('#certTables').innerHTML=Object.entries(CERT_TABLES).map(([kind,columns])=>{
    const rows=record[kind] || [];
    if(kind==='results') return `<h3>Pontos de medição</h3><p class="muted">Em Grandeza, informe a unidade da entrada (ex.: kgf/cm², °C, bar). Baixo e Alto = valor de saída ± EMA, na mesma unidade.</p><div class="table-wrap calibration-points"><table><thead><tr>${Object.entries(columns).map(([k,label])=>`<th>${fieldHelp(label,CERT_TABLE_HELP[kind][k])}</th>`).join('')}<th>Ação</th></tr></thead><tbody>${rows.map((row,i)=>`<tr>${Object.entries(columns).map(([k,label])=>`<td>${cell(kind,row,i,k,label)}</td>`).join('')}<td><button type="button" data-remove="results" data-index="${i}" aria-label="Remover ponto ${i+1}">Remover</button></td></tr>`).join('')}</tbody></table></div><button type="button" data-add="results">Adicionar ponto</button>`;

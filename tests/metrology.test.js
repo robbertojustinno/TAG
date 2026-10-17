@@ -9,7 +9,10 @@ vm.createContext(sandbox);
 vm.runInContext(code, sandbox);
 for (const prefix of ['create','edit']) {
   const html = sandbox.metrologyHtml(prefix, {range_min:0, resolution:0, measurand:'<text>'});
-  assert.equal((html.match(/<input /g) || []).length,8);
+  assert.equal((html.match(/<input /g) || []).length,6);
+  assert.equal((html.match(/<select /g) || []).length,2);
+  assert(html.includes('value="Pressão"'));
+  assert(html.includes('value="kgf/cm²"'));
   assert(html.includes('value="0"'));
   assert(html.includes('&lt;text>'));
   const keys=['measurand','measurement_unit','range_min','range_max','accuracy_class','resolution','ema','reading_contribution'];
