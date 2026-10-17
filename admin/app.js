@@ -950,7 +950,7 @@ function renderLogin(notice = '') {
           <button id="loginButton" class="primary-button">${t('loginButton')}</button>
         </div>
 
-        <div id="loginFeedback" role="alert">${notice}</div>
+        <button type="button" class="outline-button" onclick="TAGCHECK_ACCESS.forgot()">Esqueci minha senha</button><div id="loginFeedback" role="alert">${notice}</div>
       </form>
     </section>
   `;
@@ -972,7 +972,7 @@ function renderApp(notice = '') {
       <div class="card hero">
         <div>
           <h2>${t('heroTitle')}</h2>
-          <p class="subtle">${t('heroText')}</p>
+          <p class="subtle">${t('heroText')}</p><button type="button" class="outline-button" onclick="requirePasswordChange(state.authToken)">Trocar minha senha</button>
         </div>
 
         <div class="badge-row">
@@ -1608,12 +1608,14 @@ async function companyRequest(path, method = 'GET', data, blob = false) {
     const messages = {401: 'Sessão expirada. Entre novamente.', 403: 'Acesso não autorizado.',
       404: 'Registro não encontrado.', 409: 'Não foi possível salvar. Verifique os dados ou contate o suporte administrativo.',
       422: 'Verifique os campos informados, o domínio do e-mail e o formato da imagem.'};
-    throw new Error(messages[response.status] || 'Não foi possível concluir a operação.');
+    const failure = await response.json().catch(() => ({}));
+    throw new Error((typeof failure.detail === 'string' && response.status === 409 ? failure.detail : '') || messages[response.status] || 'Não foi possível concluir a operação.');
   }
   return blob ? response.blob() : response.json();
 }
 
 async function boot() {
+  if (window.TAGCHECK_ACCESS?.resetFromLink()) return;
   syncHeaderLanguage();
   openViewerButton.href = CONFIG.VIEWER_BASE_URL;
   if (openCampoButton) openCampoButton.href = CONFIG.CAMPO_BASE_URL || 'https://tagcheck-campo.onrender.com/';

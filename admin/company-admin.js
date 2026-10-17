@@ -12,7 +12,7 @@ window.TAGCHECK_COMPANY = {
       if (!panel.isConnected) return;
       panel.innerHTML = `<div class="card panel"><div class="inline-actions"><h2>Administração</h2><button id="companyBack" class="outline-button">Equipamentos e unidades</button></div>
         <h3>${escape(company.name)}</h3><p>Empresa ${company.active ? 'ativa' : 'inativa'}</p></div>
-        <div class="card panel" id="companyIdentity"></div>
+        <div class="card panel" id="companyIdentity"></div><div class="card panel" id="passwordRecoveryPanel"></div>
         <div class="card panel"><div class="inline-actions"><h3>Usuários</h3><button id="newCompanyUser" class="outline-button">Novo usuário</button></div><p id="companyFeedback" role="status" aria-live="polite"></p>
         <div class="table-wrap"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Status</th><th>Ações</th></tr></thead><tbody id="companyUserRows"></tbody></table></div>
         <h3 id="companyUserTitle">Novo usuário</h3><form id="companyUserForm" class="login-stack" autocomplete="off">
@@ -55,6 +55,7 @@ window.TAGCHECK_COMPANY = {
         f.reset();run(async()=>{await request(`/company/users/${resetId}/reset-password`,'POST',{password});f.classList.add('hidden');});
       };
       rows();
+      window.TAGCHECK_ACCESS.recoveryPanel(find('#passwordRecoveryPanel'),request,escape);
       await window.TAGCHECK_IDENTITY.mount(find('#companyIdentity'), company, '/company/logo', request, escape, refreshIdentity);
     } catch(e) { if(panel.isConnected) panel.textContent=e.message; }
   }

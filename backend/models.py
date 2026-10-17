@@ -114,3 +114,16 @@ class Equipment(Base):
     ema = Column(Numeric(24, 10), nullable=True)
     reading_contribution = Column(Numeric(24, 10), nullable=True)
     calibration_record = Column(Text, nullable=True)
+
+class PasswordRecovery(Base):
+    __tablename__ = 'password_recoveries'
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='RESTRICT'), nullable=True, index=True)
+    email_digest = Column(String(64), nullable=False, index=True)
+    ip_digest = Column(String(64), nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+    token_digest = Column(String(64), nullable=True, unique=True)
+    credential_stamp = Column(String(64), nullable=True)
+    approved_by = Column(Integer, ForeignKey('users.id', ondelete='RESTRICT'), nullable=True)
+    used_at = Column(DateTime(timezone=True), nullable=True)
