@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tagcheck-admin-offline-multiempresa-v8';
+const CACHE_NAME = 'tagcheck-admin-offline-multiempresa-v9';
 const APP_SHELL = [
   './',
   './index.html',

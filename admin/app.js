@@ -290,6 +290,16 @@ function syncHeaderLanguage() {
   const company = document.getElementById('activeCompany');
   company.textContent = state.companyName ? `${t('company')}: ${state.companyName}` : '';
   company.classList.toggle('hidden', !state.authToken || !state.companyName);
+  const profile = document.getElementById('activeUserProfile');
+  if (profile) {
+    const labels = state.language === 'en'
+      ? {company_admin:'Administrator', supervisor:'Supervisor', operator:'Operator', viewer:'Read only'}
+      : {company_admin:'Administrador', supervisor:'Supervisor', operator:'Operador', viewer:'Somente leitura'};
+    const role = state.isSuperadmin ? (state.language === 'en' ? 'Super Administrator' : 'Superadministrador') : (labels[state.role] || '');
+    profile.textContent = state.authToken ? `${state.language === 'en' ? 'User' : 'Usuário'}: ${state.authUser || '—'} · ${state.language === 'en' ? 'Profile' : 'Perfil'}: ${role || '—'}` : '';
+    profile.classList.toggle('hidden', !state.authToken || !!state.pendingPassword);
+  }
+
   document.getElementById('superadminButton').classList.toggle('hidden', !state.authToken || !state.isSuperadmin);
 }
 
