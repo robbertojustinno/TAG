@@ -2,7 +2,7 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Header, Depe
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import or_
 from pydantic import BaseModel, Field
@@ -50,7 +50,7 @@ CLOUDINARY_API_SECRET = required_env("CLOUDINARY_API_SECRET")
 SESSION_TTL_SECONDS = 8 * 60 * 60
 
 if __package__:
-    from .calibration_record import calibration_form, apply_record, read_record, master_pdf
+    from .calibration_record import calibration_form, apply_record, read_record, master_pdf, master_html
     from .metrology import metrology_form, apply_metrology, serialize_metrology, LABELS as METROLOGY_LABELS
     from .models import Base, Company, Unit, User, UserCompany, Equipment, AssetCategory, DEFAULT_COMPANY_SLUG
     from .migrate_multiempresa import make_engine, migrate
@@ -60,7 +60,7 @@ if __package__:
     from .category_api import build_category_router
     from .customer_access import build_customer_router
 else:
-    from calibration_record import calibration_form, apply_record, read_record, master_pdf
+    from calibration_record import calibration_form, apply_record, read_record, master_pdf, master_html
     from metrology import metrology_form, apply_metrology, serialize_metrology, LABELS as METROLOGY_LABELS
     from models import Base, Company, Unit, User, UserCompany, Equipment, AssetCategory, DEFAULT_COMPANY_SLUG
     from migrate_multiempresa import make_engine, migrate
@@ -889,3 +889,15 @@ def instrument_master_report(id: int, _auth: CompanyContext = Depends(auth.curre
         company = db.get(Company, item.company_id)
         return StreamingResponse(master_pdf(item, company.name), media_type='application/pdf',
             headers={'Content-Disposition': 'attachment; filename="relatorio-mestre.pdf"', 'Cache-Control':'no-store'})
+
+
+@app.get("/equipment/{id}/master-report-html", response_class=HTMLResponse)
+def instrument_master_report_html(id: int, _auth: CompanyContext = Depends(auth.current)):
+    with SessionLocal() as db:
+        item = equipment_query(db, _auth).filter(Equipment.id == id).first()
+        if not item:
+            raise HTTPException(404, 'Instrumento não encontrado')
+        company = db.get(Company, item.company_id)
+        unit = db.get(Unit, item.unit_id) if item.unit_id else None
+        return HTMLResponse(master_html(item, company.name, unit.name if unit else ''),
+            headers={'Cache-Control':'no-store', 'X-Content-Type-Options':'nosniff'})

@@ -123,3 +123,76 @@ def master_pdf(item, company_name):
         c.setFont('Helvetica',8);c.drawString(15*mm,10*mm,'TAGCheck | '+item.tag);c.drawRightString(195*mm,10*mm,'Página '+str(doc.page))
     SimpleDocTemplate(buf,pagesize=A4,leftMargin=15*mm,rightMargin=15*mm,topMargin=15*mm,bottomMargin=18*mm).build(story,onFirstPage=footer,onLaterPages=footer)
     buf.seek(0);return buf
+
+
+def master_html(item, company_name, unit_name=''):
+    """Fill the customer-supplied HTML without rebuilding its report layout."""
+    import re
+    from pathlib import Path
+    source = (Path(__file__).parent / 'templates' / 'master_report.html').read_text(encoding='utf-8')
+    record = read_record(item)
+    # The platform supplies data directly. PDF import code and its CDN are unnecessary.
+    source = re.sub(r'<script\b[^>]*>.*?</script>', '', source, flags=re.S | re.I)
+    source = re.sub(r'<input id="file"[^>]*>', '', source)
+    source = re.sub(r'<button class="secondary"[^>]*>.*?</button>', '', source, flags=re.S)
+    source = re.sub(r'(<div class="hint">).*?(</div>)', r'\1Confira os dados preenchidos e use Salvar como PDF para imprimir este modelo.\2', source, flags=re.S)
+    source = source.replace('<td>Comparação direta com padrão rastreável</td>', '<td id="procedure"></td>')
+    def text(value):
+        return escape(str(value if value is not None else ''), quote=True)
+    def fill(field, value):
+        nonlocal source
+        pattern = rf'(<(?P<tag>[a-z0-9]+)\b[^>]*\bid="{re.escape(field)}"[^>]*>).*?(</(?P=tag)>)'
+        source = re.sub(pattern, lambda m: m.group(1) + text(value) + m.group(3), source, count=1, flags=re.S)
+    def date(value):
+        from datetime import date as Date
+        try:
+            return Date.fromisoformat(str(value)).strftime('%d/%m/%Y')
+        except ValueError:
+            return str(value or '')
+    mapping = {
+        'id':item.tag, 'desc':item.name, 'fab':item.manufacturer,
+        'last':date(item.calibration_date), 'next':date(item.next_calibration_date),
+        'dep':item.sector, 'equip':record.get('equipment_id',''),
+        'docid':record.get('document_id') or record.get('certificate_number',''),
+        'loc':item.location, 'status':item.status, 'freq':record.get('frequency',''),
+        'unit':unit_name, 'procedure':record.get('procedure',''),
+        'temp':record.get('temperature',''), 'hum':record.get('humidity',''),
+        'stab':record.get('stabilization',''), 'reads':record.get('readings',''),
+        'range':record.get('evaluated_range') or record.get('input_range',''),
+        'unc':record.get('uncertainty_note',''),
+        'obs':'\n'.join(filter(None,[record.get('observations'),record.get('conclusion')])),
+        'gaps':record.get('gaps',''), 'approved':record.get('approved_by',''),
+        'approvedDate':date(record.get('approval_date','')),
+        'certno':'Nº ' + (record.get('certificate_number') or item.tag),
+        'origin':company_name,
+    }
+    if not mapping['range'] and item.range_min is not None and item.range_max is not None:
+        mapping['range']=f'{item.range_min} a {item.range_max} {item.measurement_unit or ""}'
+    standards=record.get('standards',[])
+    for field,key in [('standardName','identification'),('standardSerial','serial'),('standardCertificate','certificate'),('standardLaboratory','laboratory')]:
+        mapping[field]='\n'.join(row.get(key,'') for row in standards)
+    missing=[label for field,label in [('procedure','Procedimento não informado'),('unc','Declaração de incerteza não informada')] if not mapping[field]]
+    if not standards:
+        missing.append('Padrão utilizado não informado')
+    if not record.get('results'):
+        missing.append('Leituras não informadas')
+    if not mapping['gaps']:
+        mapping['gaps']='\n'.join(missing)
+    for field,value in mapping.items():
+        fill(field,value)
+    rows=[]
+    for row in record.get('results',[]):
+        low,high=row.get('low',''),row.get('high','')
+        try:
+            indication=Decimal(row.get('indicated','').replace(',','.'))
+            ema=Decimal(str(item.ema).replace(',','.'))
+            if indication.is_finite() and ema.is_finite() and ema >= 0 and row.get('output_unit','').casefold()==str(item.measurement_unit or '').casefold():
+                low,high=str(indication-ema),str(indication+ema)
+        except (InvalidOperation,ValueError):
+            pass
+        rows.append('<tr>'+''.join('<td>'+text(v)+'</td>' for v in [row.get('reference',''),row.get('input_unit',''),row.get('indicated',''),row.get('output_unit',''),low,high])+'</tr>')
+    source=re.sub(r'(<table id="results">\s*<tr>.*?</tr>).*?(</table>)', lambda m:m.group(1)+(''.join(rows) or '<tr><td colspan="6"></td></tr>')+m.group(2),source,count=1,flags=re.S)
+    # Retain the original template's page rebalancing behavior only.
+    original=(Path(__file__).parent / 'templates' / 'master_report.html').read_text(encoding='utf-8')
+    layout=original[original.index('function sectionFitsOnPage1'):original.index('async function processPdf')]
+    return source.replace('</body>', '<script>'+layout+'</script></body>')

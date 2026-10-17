@@ -122,8 +122,8 @@ window.openCalibration = function(prefix, selected = null, instrumentOptions = n
 };
 window.downloadMasterReport = async function(id) {
  try {
- const response=await fetchWithTimeout(`${CONFIG.API_BASE_URL}/equipment/${id}/master-report-pdf`,{headers:getAuthHeaders()});
+ const response=await fetchWithTimeout(`${CONFIG.API_BASE_URL}/equipment/${id}/master-report-html`,{headers:getAuthHeaders()});
  if(!response.ok)throw new Error('Não foi possível gerar o relatório mestre.');
- const url=URL.createObjectURL(await response.blob());const a=document.createElement('a');a.href=url;a.download='relatorio-mestre.pdf';a.click();setTimeout(()=>URL.revokeObjectURL(url),10000);
+ const url=URL.createObjectURL(new Blob([await response.text()],{type:'text/html'}));const a=document.createElement('a');a.href=url;a.target='_blank';a.rel='noopener';a.click();setTimeout(()=>URL.revokeObjectURL(url),60000);
  }catch(e){alert(e.message);}
 };

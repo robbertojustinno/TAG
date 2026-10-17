@@ -26,6 +26,16 @@ class CalibrationTests(unittest.TestCase):
         content=''.join(p.extract_text() for p in PdfReader(BytesIO(pdf.content)).pages)
         for value in ('5220/2026','1990/2026','-7.42','Não conforme'): self.assertIn(value,content)
         self.assertEqual(self.client.get(f'/equipment/{item["id"]}/master-report-pdf').status_code,401)
+        html=self.client.get(f'/equipment/{item["id"]}/master-report-html',headers=self.headers)
+        self.assertEqual(html.status_code,200)
+        self.assertIn('text/html',html.headers['content-type'])
+        for value in ('id="page1"','id="page2"','1990/2026','5220/2026','Padrão utilizado'):
+            self.assertIn(value,html.text)
+        self.assertNotIn('pdfjsLib',html.text)
+        self.assertNotIn('K = 2,77',html.text)
+        self.assertNotIn('Aguardando leitura',html.text)
+        self.assertEqual(self.client.get(f'/equipment/{item["id"]}/master-report-html').status_code,401)
+
         b=fixture.backend
         with b.SessionLocal() as db:
             company=b.Company(name='Other',slug=secrets.token_hex(6));db.add(company);db.flush()
@@ -33,6 +43,8 @@ class CalibrationTests(unittest.TestCase):
             link=b.UserCompany(user_id=user.id,company_id=company.id,role='company_admin');db.add(link);db.flush()
             foreign={'Authorization':'Bearer '+b.auth.issue(user,link)};db.commit()
         self.assertEqual(self.client.get(f'/equipment/{item["id"]}/master-report-pdf',headers=foreign).status_code,404)
+        self.assertEqual(self.client.get(f'/equipment/{item["id"]}/master-report-html',headers=foreign).status_code,404)
+
         self.assertEqual(self.update(item,calibration_record='{}').json()['calibration_record'],{})
     def test_invalid_record_rejected_before_upload(self):
         for record in ('[]','{"unknown":"x"}','{"results":[{"reference":4}]}'):
