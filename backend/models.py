@@ -127,3 +127,11 @@ class PasswordRecovery(Base):
     credential_stamp = Column(String(64), nullable=True)
     approved_by = Column(Integer, ForeignKey('users.id', ondelete='RESTRICT'), nullable=True)
     used_at = Column(DateTime(timezone=True), nullable=True)
+
+class TaggingHierarchy(Base):
+    """One versioned hierarchy per tenant; writes use optimistic concurrency."""
+    __tablename__ = 'tagging_hierarchies'
+    company_id = Column(Integer, ForeignKey('companies.id', ondelete='RESTRICT'), primary_key=True)
+    revision = Column(Integer, nullable=False, default=1)
+    document = Column(Text, nullable=False)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)

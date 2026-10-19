@@ -57,6 +57,7 @@ if __package__:
     from .tenancy import Tenancy, CompanyContext, equipment_query
     from .admin_api import build_router
     from .company_api import build_company_router
+    from .tagging_api import build_tagging_router
     from .category_api import build_category_router
     from .customer_access import build_customer_router
 else:
@@ -67,6 +68,7 @@ else:
     from tenancy import Tenancy, CompanyContext, equipment_query
     from admin_api import build_router
     from company_api import build_company_router
+    from tagging_api import build_tagging_router
     from category_api import build_category_router
     from customer_access import build_customer_router
 
@@ -140,6 +142,7 @@ app = FastAPI()
 app.include_router(build_router(auth))
 app.include_router(build_company_router(auth))
 app.include_router(build_category_router(auth))
+app.include_router(build_tagging_router(auth))
 app.include_router(build_customer_router(auth))
 
 @app.exception_handler(RequestValidationError)
