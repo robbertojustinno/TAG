@@ -138,3 +138,21 @@ class TaggingHierarchy(Base):
     revision = Column(Integer, nullable=False, default=1)
     document = Column(Text, nullable=False)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
+
+class BillingSandbox(Base):
+    __tablename__ = 'billing_sandbox'
+    company_id = Column(Integer, ForeignKey('companies.id', ondelete='RESTRICT'), primary_key=True)
+    monthly_value = Column(Numeric(12, 2), nullable=False)
+    billing_type = Column(String(20), nullable=False, default='UNDEFINED')
+    customer_id = Column(String(100), nullable=True, unique=True)
+    subscription_id = Column(String(100), nullable=True, unique=True)
+    state = Column(String(30), nullable=False, default='draft')
+    last_payment_status = Column(String(60), nullable=True)
+
+class BillingSandboxEvent(Base):
+    __tablename__ = 'billing_sandbox_events'
+    id = Column(String(200), primary_key=True)
+    company_id = Column(Integer, ForeignKey('companies.id', ondelete='RESTRICT'), nullable=False)
+    payment_id = Column(String(100), nullable=False)
+    status = Column(String(60), nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)

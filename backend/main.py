@@ -59,6 +59,7 @@ if __package__:
     from .company_api import build_company_router
     from .tagging_api import build_tagging_router
     from .category_api import build_category_router
+    from .billing_api import build_billing_router
     from .customer_access import build_customer_router
 else:
     from calibration_record import calibration_form, apply_record, read_record, master_pdf, master_html
@@ -70,6 +71,7 @@ else:
     from company_api import build_company_router
     from tagging_api import build_tagging_router
     from category_api import build_category_router
+    from billing_api import build_billing_router
     from customer_access import build_customer_router
 
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "legacy-admin@tagcheck.invalid").strip().lower()
@@ -144,6 +146,7 @@ app.include_router(build_company_router(auth))
 app.include_router(build_category_router(auth))
 app.include_router(build_tagging_router(auth))
 app.include_router(build_customer_router(auth))
+app.include_router(build_billing_router(auth))
 
 @app.exception_handler(RequestValidationError)
 async def safe_validation_error(request: Request, exc: RequestValidationError):
