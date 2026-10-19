@@ -41,4 +41,10 @@ $('backup').onclick=()=>{try{download(JSON.stringify({version:2,exportedAt:new D
 $('theme').onclick=()=>document.body.classList.toggle('light');
 $('reload').onclick=load;
 $('importBackup').onchange=async e=>{try{if(!storageReady||!canWrite)throw Error('Entre com um perfil que permite cadastro.');if(Object.values(state).some(v=>Array.isArray(v)&&v.length))throw Error('A importação inicial só é permitida quando a hierarquia está vazia.');const file=e.target.files[0];if(!file)return;if(file.size>5000000)throw Error('Arquivo muito grande.');const data=JSON.parse(await file.text()),imported=data.state||data;if(!confirm('Importar este backup para a empresa atualmente selecionada no Admin?'))return;await save(imported);$('message').textContent='Backup importado e salvo no banco da empresa.';}catch(err){$('message').textContent=err.message;}finally{e.target.value='';}};
+let pendingCSV='';
+function clearCSV(){pendingCSV='';$('csvPreview').hidden=true;$('importCSV').value='';}
+function csvReport(result){return result.created.workshops+' oficina(s), '+result.created.subsections+' subseção(ões), '+result.created.equipments+' equipamento(s) e '+result.created.instruments+' instrumento(s) novos. '+result.skipped+' registro(s) idêntico(s) ignorado(s).';}
+$('importCSV').onchange=async e=>{try{const file=e.target.files[0];clearCSV();if(!storageReady||!canWrite||busy)throw Error('Aguarde a conexão e use um perfil com permissão de cadastro.');if(!file)return;if(file.size>5000000)throw Error('O CSV excede 5 MB.');const text=await file.text();const preview=Tagging.importCSV(state,text,()=>crypto.randomUUID());pendingCSV=text;$('csvSummary').textContent=csvReport(preview);$('csvPreview').hidden=false;}catch(err){$('message').textContent=err.message;}};
+$('cancelCSV').onclick=clearCSV;
+$('confirmCSV').onclick=async()=>{try{if(!pendingCSV)return;const result=Tagging.importCSV(state,pendingCSV,()=>crypto.randomUUID());if(Object.values(result.created).some(n=>n>0))await save(result.state);clearCSV();$('message').textContent='Importação concluída. '+csvReport(result);}catch(err){$('message').textContent=err.message;}};
 render();load();

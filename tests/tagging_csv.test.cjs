@@ -1,0 +1,12 @@
+const assert=require('node:assert/strict'),t=require('../admin/tagueamento/core.js');
+let id=0;const uid=()=>`csv-${++id}`,empty={version:2,workshops:[],subsections:[],equipments:[],instruments:[]};
+const head='tipo;empresa;unidade;area;tag;descricao;equipamento_id;tag_equipamento;grandeza;funcao;malha';
+const csv='\uFEFF'+head+'\r\n'+['Equipamento;LOCAL;RDX-TACT;TACT;RDX-TACT-TK001;BVP;old1;;;;','Equipamento;LOCAL;RDX-TABS;TABS;RDX-TABS-B001;BMB01;old2;;;;','Instrumento;LOCAL;RDX-TACT;TACT;RDX-TACT-TK001-PI001;Indicador de pressão;old1;RDX-TACT-TK001;P;I;1','Instrumento;LOCAL;RDX-TABS;TABS;RDX-TABS-B001-PI001;Indicador de pressão;old2;RDX-TABS-B001;P;I;1'].join('\r\n');
+const result=t.importCSV(empty,csv,uid);assert.deepEqual(result.created,{workshops:1,subsections:2,equipments:2,instruments:2});assert.equal(result.state.instruments[0].loop,'001');assert.equal(empty.workshops.length,0);
+assert.equal(t.importCSV(result.state,csv,uid).skipped,4);
+assert.equal(t.importCSV(result.state,t.csv(result.state),uid).skipped,4);
+assert.equal(t.importCSV(empty,csv.replace('BVP','"BVP; \"\"pressão\"\"\nlinha"'),uid).state.equipments[0].name,'BVP; "pressão"\nlinha');
+for(const bad of [csv.replace('BVP','DIFFERENT'),csv.replace('RDX-TACT-TK001-PI001','RDX-TACT-TK001-TI001'),csv.replace('old1;RDX-TACT-TK001','old2;RDX-TACT-TK001'),csv.replace('Instrumento;','Unknown;')])assert.throws(()=>t.importCSV(result.state,bad,uid));
+assert.throws(()=>t.importCSV(empty,head+'\n"unterminated',uid));
+assert.throws(()=>t.importCSV(empty,'tag,name\nPI001,Pressure',uid),/colunas/);
+console.log('CSV parser, hierarchy reconstruction, links, loop normalization, duplicate skips, conflicts and atomic validation passed');
