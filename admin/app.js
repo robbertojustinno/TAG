@@ -297,6 +297,11 @@ function syncHeaderLanguage() {
     openCampoButton.textContent = state.language === 'pt' ? 'Cadastro Offline' : 'Offline Registration';
     openCampoButton.classList.toggle('hidden', !state.authToken);
   }
+  const taggingButton = document.getElementById('openTaggingButton');
+  if (taggingButton) {
+    taggingButton.textContent = state.language === 'en' ? 'Tagging' : 'Tagueamento';
+    taggingButton.classList.toggle('hidden', !state.authToken);
+  }
   logoutButton.textContent = t('logout');
   logoutButton.classList.toggle('hidden', !state.authToken);
   const company = document.getElementById('activeCompany');
