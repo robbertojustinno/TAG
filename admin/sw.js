@@ -1,8 +1,9 @@
-const CACHE_NAME = 'tagcheck-admin-offline-multiempresa-v18';
+const CACHE_NAME = 'tagcheck-admin-offline-multiempresa-v19';
 const APP_SHELL = [
   './',
   './index.html',
-  './styles.css',
+  './admin-layout.css?v=20261019-layout',
+  './billing-layout.js?v=20261019-layout',
   './config.js',
   './company-admin.js',
   './superadmin.js',
