@@ -22,6 +22,19 @@ window.TAGCHECK_SUPERADMIN = {
         <div class="card panel"><h3>Usuários</h3><div class="table-wrap"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Status</th><th>Ações</th></tr></thead><tbody id="userRows"></tbody></table></div><form id="userCreateForm" class="login-stack" autocomplete="off"><label>Nome<input class="input" name="name" required maxlength="200"></label><label>E-mail<input class="input" name="email" type="email" required maxlength="254"></label><label>Senha inicial (mínimo de 12 caracteres)<input class="input" name="password" type="password" required minlength="12" maxlength="1024" autocomplete="new-password"></label><button class="primary-button">Criar usuário</button></form></div></div>
         <div class="card panel"><h3>Empresas e usuários cadastrados</h3><div id="companyUserRows" class="company-user-list"></div></div>
         <div id="globalCompanySettings" class="card panel hidden"></div><div class="card panel"><h3>Vínculo usuário / empresa</h3><form id="membershipForm" class="login-stack"><label>Usuário<select id="memberUser" class="input" required></select></label><label>Empresa<select id="memberCompany" class="input" required></select></label><label>Papel<select id="memberRole" class="input" required>${Object.entries(roles).map(([value,label]) => `<option value="${value}">${label}</option>`).join('')}</select></label><label><input id="memberActive" type="checkbox" checked> Vínculo ativo</label><p id="membershipStatus"></p><button id="saveMembership" class="primary-button">Salvar vínculo</button></form></div>`;
+        const sections = [
+          ['companies','Empresas',[find('#companyRows').closest('.card'),find('#globalCompanySettings')]],
+          ['onboarding','Clientes e testes',[find('#customerOnboarding')]],
+          ['billing','Pagamentos',[find('#billingPanel')]],
+          ['users','Usuários e acessos',[find('#userRows').closest('.card'),find('#companyUserRows').closest('.card'),find('#membershipForm').closest('.card')]],
+          ['recovery','Recuperação de acesso',[find('#passwordRecoveryPanel')]]
+        ];
+        const nav=document.createElement('nav');nav.className='superadmin-nav';nav.setAttribute('aria-label','Seções da administração');
+        const switchSection=key=>{for(const [id] of sections){find('#sa-section-'+id).hidden=id!==key;const button=nav.querySelector('[data-section="'+id+'"]');button.classList.toggle('active',id===key);button.setAttribute('aria-pressed',String(id===key));}};
+        panel.children[0].after(nav);
+        for(const [key,label,nodes] of sections){const area=document.createElement('div');area.id='sa-section-'+key;area.className='superadmin-section';for(const node of nodes)area.append(node);panel.append(area);const button=document.createElement('button');button.type='button';button.textContent=label;button.dataset.section=key;button.className='outline-button';button.onclick=()=>switchSection(key);nav.append(button);}
+        const unusedGrid=find('.superadmin-grid');if(unusedGrid)unusedGrid.remove();
+        switchSection('companies');
         bind();
       };
       const refresh = () => {
