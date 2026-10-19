@@ -9,9 +9,11 @@ import jwt
 from fastapi import Header, HTTPException, Request
 from sqlalchemy import select
 if __package__:
+    from .trials import status as trial_status
     from .models import Company, User, UserCompany, Equipment, ROLES
     from .passwords import verify_password
 else:
+    from trials import status as trial_status
     from models import Company, User, UserCompany, Equipment, ROLES
     from passwords import verify_password
 
@@ -148,6 +150,10 @@ class Tenancy:
     def current(self, request: Request, authorization: str | None = Header(default=None)):
         context = self.from_token(self.bearer(authorization))
         self.check_company_hint(request, context)
+        if not context.is_superadmin and request.method not in ('GET', 'HEAD', 'OPTIONS'):
+            with self.sessions() as db:
+                if trial_status(db.get(Company, context.company_id))['trial_status'] == 'expired':
+                    raise HTTPException(403, 'Período de teste encerrado. Contate a ROVIX para contratar ou prorrogar. Seus dados estão preservados.')
         return context
 
     def read_context(self, request: Request, authorization: str | None = Header(default=None)):

@@ -17,6 +17,7 @@ else:
 class CustomerSetup(Input):
     company_id: int | None = Field(None, gt=0)
     company: NewCompany | None = None
+    trial_days: int | None = Field(None, ge=7, le=10, strict=True)
     administrator: NewUser
 
 class RecoveryRequest(Input):
@@ -49,6 +50,8 @@ def build_customer_router(auth):
         if bool(payload.company_id) == bool(payload.company):
             raise HTTPException(422, 'Escolha uma empresa existente ou informe uma nova empresa.')
         with auth.sessions() as db:
+            if payload.trial_days is not None and payload.company_id:
+                raise HTTPException(422, "Para teste, cadastre uma nova empresa.")
             if payload.company_id:
                 company = db.scalar(select(Company).where(Company.id == payload.company_id).with_for_update())
                 if not company or not company.active:
@@ -69,6 +72,7 @@ def build_customer_router(auth):
                         is_superadmin=False, must_change_password=True)
             db.add(user); safe_flush(db)
             db.add(UserCompany(user_id=user.id, company_id=company.id, role='company_admin', active=True))
+            company.trial_days = payload.trial_days
             company.admin_email = user.email
             commit(db)
             return {'company': company_json(company), 'administrator': user_json(user), 'must_change_password': True}

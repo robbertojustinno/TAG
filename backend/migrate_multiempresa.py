@@ -92,7 +92,7 @@ def migrate(engine, username, password, email):
         if 'must_change_password' not in user_columns:
             connection.execute(text('ALTER TABLE users ADD COLUMN must_change_password BOOLEAN NOT NULL DEFAULT false'))
         company_columns = {c['name'] for c in inspect(connection).get_columns('companies')}
-        for name in ('logo_url', 'logo_data', 'logo_mime', 'admin_email', 'email_domains', 'email_exceptions'):
+        for name in ('logo_url', 'logo_data', 'logo_mime', 'admin_email', 'email_domains', 'email_exceptions', 'trial_days', 'trial_started_at', 'trial_expires_at'):
             if name not in company_columns:
                 sql_type = Company.__table__.c[name].type.compile(dialect=connection.dialect)
                 connection.execute(text(f'ALTER TABLE companies ADD COLUMN {name} {sql_type}'))

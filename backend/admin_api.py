@@ -1,4 +1,5 @@
 """Authentication and superadmin endpoints, with explicit safe response fields."""
+from datetime import timedelta
 from typing import Literal
 import re
 import json
@@ -7,9 +8,11 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 if __package__:
+    from .trials import status as trial_status, now as trial_now, aware as trial_aware
     from .models import Company, Unit, User, UserCompany
     from .passwords import hash_password, verify_password, is_demo_account
 else:
+    from trials import status as trial_status, now as trial_now, aware as trial_aware
     from models import Company, Unit, User, UserCompany
     from passwords import hash_password, verify_password, is_demo_account
 
@@ -29,6 +32,10 @@ class SelectCompany(Input):
 class NewCompany(Input):
     name: str = Field(min_length=1, max_length=200)
     slug: str = Field(pattern=r'^[a-z0-9]+(?:-[a-z0-9]+)*$', max_length=100)
+
+class TrialAction(Input):
+    action: Literal["extend", "activate"]
+    days: int = Field(10, ge=1, le=365, strict=True)
 
 class CompanyState(Input):
     active: bool
@@ -125,7 +132,7 @@ class Membership(Input):
     active: bool = True
 
 def company_json(c):
-    return {'id': c.id, 'name': c.name, 'slug': c.slug, 'active': c.active, 'created_at': c.created_at, 'logo_url': c.logo_url, 'admin_email': c.admin_email,
+    return {**trial_status(c), 'id': c.id, 'name': c.name, 'slug': c.slug, 'active': c.active, 'created_at': c.created_at, 'logo_url': c.logo_url, 'admin_email': c.admin_email,
             'email_domains': json.loads(c.email_domains or '[]'),
             'email_exceptions': json.loads(c.email_exceptions or '[]')}
 
@@ -189,6 +196,14 @@ def build_router(auth):
             companies = [(c, m) for c, m in companies if c.id == auth.default_company_id]
         if not companies:
             raise HTTPException(403, 'No active company is associated with this user')
+        # Lock each evaluation to start its clock exactly once after valid credentials.
+        for company, _link in companies:
+            if company.trial_days is not None:
+                locked = db.scalar(select(Company).where(Company.id == company.id).with_for_update().execution_options(populate_existing=True))
+                if locked.trial_started_at is None:
+                    locked.trial_started_at = trial_now()
+                    locked.trial_expires_at = locked.trial_started_at + timedelta(days=locked.trial_days)
+        db.commit()
         if user.must_change_password:
             return {'ok': True, 'must_change_password': True,
                     'token': auth.issue(user, purpose='password_change', ttl=900, legacy=legacy),
@@ -311,6 +326,23 @@ def build_router(auth):
             db.add(item)
             commit(db)
             return company_json(item)
+
+    @router.post('/companies/{company_id}/trial')
+    def manage_trial(company_id: int, payload: TrialAction, _=Depends(auth.superadmin)):
+        with auth.sessions() as db:
+            company = db.scalar(select(Company).where(Company.id == company_id).with_for_update())
+            if not company:
+                raise HTTPException(404, 'Empresa não encontrada.')
+            if payload.action == 'activate':
+                company.trial_days = None
+            elif company.trial_days is None:
+                raise HTTPException(409, 'Esta empresa não está em teste.')
+            elif company.trial_started_at is None:
+                company.trial_days += payload.days
+            else:
+                company.trial_expires_at = max(trial_aware(company.trial_expires_at), trial_now()) + timedelta(days=payload.days)
+            commit(db)
+            return company_json(company)
 
     @router.patch('/companies/{company_id}')
     def company_state(company_id: int, payload: CompanyUpdate, _=Depends(auth.superadmin)):

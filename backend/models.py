@@ -24,6 +24,9 @@ class Company(Base):
     email_exceptions = Column(Text, nullable=True)
     active = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
+    trial_days = Column(Integer, nullable=True)
+    trial_started_at = Column(DateTime(timezone=True), nullable=True)
+    trial_expires_at = Column(DateTime(timezone=True), nullable=True)
     units = relationship('Unit', back_populates='company', passive_deletes='all')
 
 class Unit(Base):
