@@ -4,11 +4,11 @@ from sqlalchemy import create_engine, event, inspect, select, text
 from sqlalchemy.orm import Session
 if __package__:
     from .migrate_metrology import migrate_metrology
-    from .models import Base, Company, Unit, User, UserCompany, Equipment, AssetCategory, PasswordRecovery, TaggingHierarchy, BillingSandbox, BillingSandboxEvent, DEFAULT_COMPANY_SLUG
+    from .models import Base, Company, Unit, User, UserCompany, Equipment, AssetCategory, PasswordRecovery, TaggingHierarchy, BillingSandbox, BillingSandboxEvent, BillingProduction, BillingProductionEvent, DEFAULT_COMPANY_SLUG
     from .passwords import hash_password, verify_password
 else:
     from migrate_metrology import migrate_metrology
-    from models import Base, Company, Unit, User, UserCompany, Equipment, AssetCategory, PasswordRecovery, TaggingHierarchy, BillingSandbox, BillingSandboxEvent, DEFAULT_COMPANY_SLUG
+    from models import Base, Company, Unit, User, UserCompany, Equipment, AssetCategory, PasswordRecovery, TaggingHierarchy, BillingSandbox, BillingSandboxEvent, BillingProduction, BillingProductionEvent, DEFAULT_COMPANY_SLUG
     from passwords import hash_password, verify_password
 
 def make_engine(url):
@@ -87,7 +87,7 @@ def migrate(engine, username, password, email):
             # Block concurrent equipment writes while checking and normalizing.
             connection.execute(text('LOCK TABLE tagcheck_equipment IN SHARE ROW EXCLUSIVE MODE'))
         before = connection.execute(text('SELECT COUNT(*) FROM tagcheck_equipment')).scalar_one() if existing else 0
-        Base.metadata.create_all(connection, tables=[Company.__table__, Unit.__table__, User.__table__, UserCompany.__table__, AssetCategory.__table__, PasswordRecovery.__table__, TaggingHierarchy.__table__, BillingSandbox.__table__, BillingSandboxEvent.__table__])
+        Base.metadata.create_all(connection, tables=[Company.__table__, Unit.__table__, User.__table__, UserCompany.__table__, AssetCategory.__table__, PasswordRecovery.__table__, TaggingHierarchy.__table__, BillingSandbox.__table__, BillingSandboxEvent.__table__, BillingProduction.__table__, BillingProductionEvent.__table__])
         user_columns = {c['name'] for c in inspect(connection).get_columns('users')}
         if 'must_change_password' not in user_columns:
             connection.execute(text('ALTER TABLE users ADD COLUMN must_change_password BOOLEAN NOT NULL DEFAULT false'))
