@@ -1,5 +1,5 @@
 """Production billing isolated from sandbox. Access remains managed by Super Admin."""
-import hmac, json, os, re
+import hashlib, hmac, json, os, re
 from datetime import date
 from decimal import Decimal
 from typing import Literal
@@ -23,6 +23,35 @@ class CreateSubscription(Input):
     confirm_real: Literal[True]
     cpf_cnpj: str = Field(pattern=r'^(?:[0-9]{11}|[0-9]{14})$')
     next_due_date: date
+
+class EditSubscription(BillingPlan):
+    confirm_real: Literal[True]
+    next_due_date: date
+    description: str = Field(max_length=500)
+    update_pending_payments: bool = False
+    expected_snapshot: str = Field(pattern=r'^[a-f0-9]{64}$')
+
+def subscription_view(sub, row):
+    if sub.get('id') != row.subscription_id or sub.get('customer') != row.customer_id:
+        raise HTTPException(409,'A assinatura não corresponde à empresa selecionada.')
+    try:
+        value=Decimal(str(sub['value']))
+        if not value.is_finite() or value<=0:raise ValueError()
+        next_due=date.fromisoformat(sub['nextDueDate']).isoformat()
+        kind=sub['billingType']
+        if kind not in ('UNDEFINED','BOLETO','PIX','CREDIT_CARD'):raise ValueError()
+    except (ValueError,KeyError,TypeError,ArithmeticError):
+        raise HTTPException(502,'Dados incompletos na assinatura do Asaas.') from None
+    result={'subscription_id':sub['id'],'monthly_value':str(value),'billing_type':kind,
+        'next_due_date':next_due,'description':sub.get('description') or '',
+        'cycle':sub.get('cycle'),'status':sub.get('status')}
+    result['snapshot']=hashlib.sha256(json.dumps(result,sort_keys=True).encode()).hexdigest()
+    return result
+
+def payment_state(status):
+    return ('paid' if status in ('RECEIVED','CONFIRMED','RECEIVED_IN_CASH') else
+        'refunded' if status in ('REFUNDED','REFUND_REQUESTED','CHARGEBACK_REQUESTED','CHARGEBACK_DISPUTE') else
+        'overdue' if status=='OVERDUE' else 'awaiting_payment')
 
 def credentials():
     if os.getenv('ASAAS_PRODUCTION_ENABLED','').lower() != 'true':
@@ -103,12 +132,57 @@ def build_production_billing_router(auth):
             row.subscription_id=safe_id(result.get('id'),'sub');row.state='awaiting_payment';commit(db)
             return view(row)
 
+    @router.get('/companies/{company_id}/billing/production/subscription')
+    def subscription(company_id:int,_=Depends(auth.superadmin)):
+        with auth.sessions() as db:
+            row=db.get(BillingProduction,company_id)
+            if not row or not row.subscription_id:raise HTTPException(404,'Assinatura não encontrada.')
+            return subscription_view(provider('GET',f'/subscriptions/{safe_id(row.subscription_id,"sub")}'),row)
+
+    @router.put('/companies/{company_id}/billing/production/subscription')
+    def edit_subscription(company_id:int,payload:EditSubscription,_=Depends(auth.superadmin)):
+        credentials()
+        if payload.next_due_date<date.today():raise HTTPException(422,'Escolha vencimento a partir de hoje.')
+        with auth.sessions() as db:
+            row=db.scalar(select(BillingProduction).where(BillingProduction.company_id==company_id).with_for_update())
+            if not row or not row.subscription_id:raise HTTPException(404,'Assinatura não encontrada.')
+            if row.state in ('creating','updating','needs_review'):
+                raise HTTPException(409,'Há uma operação pendente. Use Conciliar assinatura antes de editar.')
+            path=f'/subscriptions/{safe_id(row.subscription_id,"sub")}'
+            current=subscription_view(provider('GET',path),row)
+            if current['snapshot']!=payload.expected_snapshot:
+                raise HTTPException(409,'A assinatura mudou no Asaas. Reabra a edição para conferir os dados atuais.')
+            if current['cycle']!='MONTHLY' or current['status']!='ACTIVE':
+                raise HTTPException(409,'A edição requer assinatura mensal ativa. Confira a assinatura no Asaas.')
+            # Hold the row lock through the remote edit. Persist an uncertain outcome
+            # before returning an error; subsequent edits require reconciliation.
+            row.state='updating';db.flush()
+            try:
+                provider('PUT',path,{'value':float(payload.monthly_value),'billingType':payload.billing_type,
+                    'nextDueDate':payload.next_due_date.isoformat(),'description':payload.description,
+                    'updatePendingPayments':payload.update_pending_payments})
+                actual=subscription_view(provider('GET',path),row)
+                if (Decimal(actual['monthly_value'])!=payload.monthly_value or actual['billing_type']!=payload.billing_type
+                        or actual['next_due_date']!=payload.next_due_date.isoformat() or actual['description']!=payload.description):
+                    raise HTTPException(502,'A alteração não foi confirmada integralmente. Use Conciliar assinatura.')
+            except HTTPException:
+                commit(db)
+                raise
+            row.monthly_value=Decimal(actual['monthly_value']);row.billing_type=actual['billing_type']
+            row.state=payment_state(row.last_payment_status);commit(db)
+            return view(row)
+
     @router.post('/companies/{company_id}/billing/production/reconcile')
     def reconcile(company_id:int,_=Depends(auth.superadmin)):
         with auth.sessions() as db:
             db.scalar(select(Company).where(Company.id==company_id).with_for_update())
-            row=db.get(BillingProduction,company_id)
+            row=db.scalar(select(BillingProduction).where(BillingProduction.company_id==company_id).with_for_update())
             if not row:raise HTTPException(404,'Plano não encontrado.')
+            if row.subscription_id:
+                sub=subscription_view(provider('GET',f'/subscriptions/{safe_id(row.subscription_id,"sub")}'),row)
+                row.monthly_value=Decimal(sub['monthly_value']);row.billing_type=sub['billing_type']
+                row.state=payment_state(row.last_payment_status);commit(db)
+                return view(row)
             ref=f'tagcheck-production-{company_id}'
             if not row.customer_id:
                 customers=provider('GET','/customers?externalReference='+ref).get('data',[])
@@ -152,14 +226,15 @@ def build_production_billing_router(auth):
             actual=provider('GET',f'/payments/{pid}')
             row=db.scalar(select(BillingProduction).where(BillingProduction.subscription_id==actual.get('subscription')).with_for_update()) if actual.get('subscription') else None
             if not row:return {'ok':True,'ignored':True}
-            if actual.get('customer')!=row.customer_id or Decimal(str(actual.get('value',0)))!=row.monthly_value:
+            if row.state=='updating':raise HTTPException(409,'Alteração da assinatura pendente de conciliação.')
+            # Earlier invoices can have the price from before a subscription edit.
+            # The authenticated provider lookup, stored subscription and customer establish ownership.
+            if actual.get('customer')!=row.customer_id:
                 raise HTTPException(409,'Cobrança divergente do plano de produção.')
             if actual.get('id')!=pid:raise HTTPException(409,'Identificação da cobrança divergente.')
             status=actual.get('status','UNKNOWN')
             row.last_payment_status=status
-            row.state=('paid' if status in ('RECEIVED','CONFIRMED','RECEIVED_IN_CASH') else
-                'refunded' if status in ('REFUNDED','REFUND_REQUESTED','CHARGEBACK_REQUESTED','CHARGEBACK_DISPUTE') else
-                'overdue' if status=='OVERDUE' else 'awaiting_payment')
+            row.state=payment_state(status)
             db.add(BillingProductionEvent(id=eid,company_id=row.company_id,payment_id=pid,status=status))
             commit(db)
             # Payment state is recorded; activation remains an explicit Super Admin action.

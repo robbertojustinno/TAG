@@ -101,8 +101,8 @@ class ProductionBillingTests(unittest.TestCase):
   import billing_production_api as billing_api
   suffix=secrets.token_hex(6)
   with b.SessionLocal() as db:
-   row=db.get(BillingProduction,self.company);row.customer_id='cus_'+suffix;row.subscription_id='sub_'+suffix;row.state='paid';db.commit()
-  with patch.object(billing_api,'provider',return_value={'data':[{'id':'sub_'+suffix,'customer':'cus_'+suffix,'value':'99.90'}]}):
+   row=db.get(BillingProduction,self.company);row.customer_id='cus_'+suffix;row.subscription_id='sub_'+suffix;row.state='paid';row.last_payment_status='RECEIVED';db.commit()
+  with patch.object(billing_api,'provider',return_value={'id':'sub_'+suffix,'customer':'cus_'+suffix,'value':'99.90','billingType':'UNDEFINED','nextDueDate':date.today().isoformat(),'description':'TagCheck','cycle':'MONTHLY','status':'ACTIVE'}):
    response=self.client.post(self.path+'/reconcile',headers=self.headers,json={})
    self.assertEqual(response.json()['state'],'paid')
  def test_transport_uses_only_live_base_and_server_secret(self):
