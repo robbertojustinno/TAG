@@ -9,10 +9,10 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import Field
 from sqlalchemy import select
 if __package__:
-    from .models import Company, BillingProduction, BillingProductionEvent
+    from .models import Company, BillingProduction, BillingProductionEvent, BillingProductionInvoice
     from .admin_api import Input, commit
 else:
-    from models import Company, BillingProduction, BillingProductionEvent
+    from models import Company, BillingProduction, BillingProductionEvent, BillingProductionInvoice
     from admin_api import Input, commit
 
 BASE='https://api.asaas.com/v3'
@@ -23,6 +23,15 @@ class CreateSubscription(Input):
     confirm_real: Literal[True]
     cpf_cnpj: str = Field(pattern=r'^(?:[0-9]{11}|[0-9]{14})$')
     next_due_date: date
+
+class NewInvoice(Input):
+    confirm_real: Literal[True]
+    value: Decimal = Field(gt=0, le=100000, max_digits=12, decimal_places=2)
+    due_date: date
+
+class RestoreInvoice(Input):
+    confirm_real: Literal[True]
+    payment_id: str = Field(pattern=r'^pay_[A-Za-z0-9]+$')
 
 class EditSubscription(BillingPlan):
     confirm_real: Literal[True]
@@ -199,14 +208,109 @@ def build_production_billing_router(auth):
             else:row.state='draft' if row.state=='draft' else 'needs_review'
             commit(db);return view(row)
 
+    def list_subscription_payments(row):
+        result=[]
+        for offset in range(0,10000,100):
+            page=provider('GET',f'/subscriptions/{safe_id(row.subscription_id,"sub")}/payments?limit=100&offset={offset}')
+            result.extend(page.get('data',[]))
+            if not page.get('hasMore'):return result
+        raise HTTPException(502,'Lista extensa de faturas. Confira a assinatura no Asaas.')
+
+    def invoice_view(p):
+        return {'id':p.get('id'),'status':p.get('status'),'value':p.get('value'),
+            'due_date':p.get('dueDate'),'invoice_url':p.get('invoiceUrl'),'deleted':p.get('deleted',False)}
+
+    def owned_payment(db,row,p):
+        if p.get('customer')!=row.customer_id:return False
+        if p.get('subscription')==row.subscription_id and row.subscription_id:return True
+        intent=db.scalar(select(BillingProductionInvoice).where(BillingProductionInvoice.company_id==row.company_id,
+            BillingProductionInvoice.reference==p.get('externalReference')))
+        return bool(intent and (not intent.payment_id or intent.payment_id==p.get('id')))
+
     @router.get('/companies/{company_id}/billing/production/payments')
     def payments(company_id:int,_=Depends(auth.superadmin)):
         with auth.sessions() as db:
             row=db.get(BillingProduction,company_id)
             if not row or not row.subscription_id:return []
-            data=provider('GET',f'/subscriptions/{row.subscription_id}/payments').get('data',[])
-            return [{'id':p.get('id'),'status':p.get('status'),'value':p.get('value'),
-                     'due_date':p.get('dueDate'),'invoice_url':p.get('invoiceUrl')} for p in data]
+            data=list_subscription_payments(row)
+            seen={p.get('id') for p in data}
+            for intent in db.scalars(select(BillingProductionInvoice).where(BillingProductionInvoice.company_id==company_id)):
+                if intent.payment_id and intent.payment_id not in seen:
+                    p=provider('GET',f'/payments/{safe_id(intent.payment_id,"pay")}')
+                    if not owned_payment(db,row,p):raise HTTPException(409,'Fatura divergente da empresa.')
+                    data.append(p)
+            return [invoice_view(p) for p in data]
+
+    @router.post('/companies/{company_id}/billing/production/payments/new')
+    def new_invoice(company_id:int,payload:NewInvoice,_=Depends(auth.superadmin)):
+        credentials()
+        if len(os.getenv('ASAAS_PRODUCTION_WEBHOOK_TOKEN',''))<32:raise HTTPException(503,'Configure o webhook de produção.')
+        if payload.due_date<date.today():raise HTTPException(422,'Escolha vencimento a partir de hoje.')
+        period=payload.due_date.isoformat()[:7]
+        with auth.sessions() as db:
+            db.scalar(select(Company).where(Company.id==company_id).with_for_update())
+            row=db.get(BillingProduction,company_id)
+            if not row or not row.subscription_id or not row.customer_id:raise HTTPException(409,'Cadastre a assinatura primeiro.')
+            if row.state in ('creating','updating','needs_review'):raise HTTPException(409,'Concilie a assinatura antes de emitir boleto.')
+            if db.get(BillingProductionInvoice,(company_id,period)):
+                raise HTTPException(409,'Já existe emissão para este mês. Consulte as faturas ou use Conciliar emissão; não repita a criação.')
+            remote_sub=provider('GET',f'/subscriptions/{safe_id(row.subscription_id,"sub")}')
+            subscription_view(remote_sub,row)
+            if remote_sub.get('deleted') or remote_sub.get('status')!='ACTIVE':raise HTTPException(409,'Confira a assinatura: ela deve estar ativa para emitir reposição.')
+            if period>=str(remote_sub['nextDueDate'])[:7]:raise HTTPException(409,'Este mês já tem cobrança futura agendada na assinatura. Confira o próximo vencimento antes de emitir reposição.')
+            existing=list_subscription_payments(row)
+            if any(not p.get('deleted') and str(p.get('dueDate','')).startswith(period) for p in existing):
+                raise HTTPException(409,'Já existe uma cobrança da assinatura neste mês. Consulte as faturas antes de emitir outra.')
+            intent=BillingProductionInvoice(company_id=company_id,period=period,reference=f'tagcheck-reissue-{company_id}-{period}')
+            db.add(intent);commit(db)
+            # Persist before the provider write. A timeout is reconciled by the unique reference.
+            p=provider('POST','/payments',{'customer':row.customer_id,'billingType':'BOLETO',
+                'value':float(payload.value),'dueDate':payload.due_date.isoformat(),
+                'description':f'TagCheck — boleto avulso de reposição ({period})','externalReference':intent.reference})
+            if (p.get('customer')!=row.customer_id or p.get('externalReference')!=intent.reference
+                    or Decimal(str(p.get('value',0)))!=payload.value or p.get('dueDate')!=payload.due_date.isoformat() or p.get('billingType')!='BOLETO'):
+                raise HTTPException(502,'Emissão não confirmada. Use Conciliar emissão antes de tentar novamente.')
+            intent.payment_id=safe_id(p.get('id'),'pay');intent.state='created';commit(db)
+            return invoice_view(p)
+
+    @router.post('/companies/{company_id}/billing/production/payments/reconcile/{period}')
+    def reconcile_invoice(company_id:int,period:str,_=Depends(auth.superadmin)):
+        if not re.fullmatch(r'[0-9]{4}-(0[1-9]|1[0-2])',period):raise HTTPException(422,'Informe o mês no formato AAAA-MM.')
+        with auth.sessions() as db:
+            intent=db.scalar(select(BillingProductionInvoice).where(BillingProductionInvoice.company_id==company_id,
+                BillingProductionInvoice.period==period).with_for_update())
+            row=db.get(BillingProduction,company_id)
+            if not intent or not row:raise HTTPException(404,'Não há tentativa de emissão para esse mês.')
+            data=provider('GET',f'/payments?externalReference={intent.reference}&limit=100').get('data',[])
+            if len(data)!=1:raise HTTPException(409,'Emissão não localizada de forma única. Confira o Asaas antes de uma nova cobrança.')
+            p=data[0]
+            if p.get('customer')!=row.customer_id or p.get('externalReference')!=intent.reference:
+                raise HTTPException(409,'Cobrança divergente da empresa.')
+            intent.payment_id=safe_id(p.get('id'),'pay');intent.state='created';commit(db)
+            return invoice_view(p)
+
+    @router.post('/companies/{company_id}/billing/production/payments/restore')
+    def restore_invoice(company_id:int,payload:RestoreInvoice,_=Depends(auth.superadmin)):
+        credentials()
+        with auth.sessions() as db:
+            row=db.scalar(select(BillingProduction).where(BillingProduction.company_id==company_id).with_for_update())
+            if not row:raise HTTPException(404,'Plano não encontrado.')
+            path=f'/payments/{safe_id(payload.payment_id,"pay")}'
+            p=provider('GET',path)
+            if p.get('id')!=payload.payment_id or not owned_payment(db,row,p):raise HTTPException(409,'Cobrança não pertence a esta empresa/assinatura.')
+            if not p.get('deleted'):return invoice_view(p)
+            period=str(p.get('dueDate',''))[:7]
+            if any(other.get('id')!=payload.payment_id and not other.get('deleted') and str(other.get('dueDate','')).startswith(period)
+                    for other in list_subscription_payments(row)):
+                raise HTTPException(409,'Já existe outra cobrança deste mês. Confira as faturas antes de restaurar.')
+            intent=db.get(BillingProductionInvoice,(company_id,period))
+            if intent and intent.payment_id and intent.payment_id!=payload.payment_id:
+                other=provider('GET',f'/payments/{safe_id(intent.payment_id,"pay")}')
+                if not other.get('deleted'):raise HTTPException(409,'Já existe boleto de reposição para este mês.')
+            provider('POST',path+'/restore',{})
+            p=provider('GET',path)
+            if p.get('deleted') or not owned_payment(db,row,p):raise HTTPException(502,'Restauração não confirmada. Consulte a cobrança antes de tentar novamente.')
+            return invoice_view(p)
 
     @router.post('/webhooks/asaas/production')
     async def webhook(request:Request):
@@ -225,6 +329,10 @@ def build_production_billing_router(auth):
             # Do not trust amounts, tenant identifiers or status in callbacks.
             actual=provider('GET',f'/payments/{pid}')
             row=db.scalar(select(BillingProduction).where(BillingProduction.subscription_id==actual.get('subscription')).with_for_update()) if actual.get('subscription') else None
+            if not row:
+                intent=db.scalar(select(BillingProductionInvoice).where(BillingProductionInvoice.reference==actual.get('externalReference')))
+                if intent and (not intent.payment_id or intent.payment_id==pid):
+                    row=db.scalar(select(BillingProduction).where(BillingProduction.company_id==intent.company_id).with_for_update())
             if not row:return {'ok':True,'ignored':True}
             if row.state=='updating':raise HTTPException(409,'Alteração da assinatura pendente de conciliação.')
             # Earlier invoices can have the price from before a subscription edit.

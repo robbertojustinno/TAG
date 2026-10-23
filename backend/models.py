@@ -174,3 +174,13 @@ class BillingProductionEvent(Base):
     payment_id = Column(String(100), nullable=False)
     status = Column(String(60), nullable=False)
     created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
+
+class BillingProductionInvoice(Base):
+    """Durable intent prevents duplicate replacement invoices after timeouts."""
+    __tablename__ = 'billing_production_invoices'
+    company_id = Column(Integer, ForeignKey('companies.id', ondelete='RESTRICT'), primary_key=True)
+    period = Column(String(7), primary_key=True)
+    payment_id = Column(String(100), nullable=True, unique=True)
+    reference = Column(String(100), nullable=False, unique=True)
+    state = Column(String(30), nullable=False, default='creating')
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)

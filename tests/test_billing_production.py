@@ -34,7 +34,7 @@ class ProductionBillingTests(unittest.TestCase):
    if path=='/subscriptions':
     self.assertEqual(payload['externalReference'],f'tagcheck-production-{self.company}');self.assertNotIn('TESTE',payload['description']);self.assertEqual(payload['billingType'],'UNDEFINED');self.assertEqual(payload['cycle'],'MONTHLY')
     return {'id':'sub_test'}
-   if path=='/subscriptions/sub_test/payments':return {'data':[{'id':'pay_test','status':'PENDING','invoiceUrl':'https://sandbox.asaas.com/i/test'}]}
+   if path=='/subscriptions/sub_test/payments?limit=100&offset=0':return {'data':[{'id':'pay_test','status':'PENDING','invoiceUrl':'https://sandbox.asaas.com/i/test'}]}
    self.fail(path)
   import billing_production_api as billing_api
   with patch.dict(os.environ,{'ASAAS_PRODUCTION_API_KEY':'test-secret'}),patch.object(billing_api,'provider',side_effect=remote):
