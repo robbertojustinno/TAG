@@ -184,3 +184,13 @@ class BillingProductionInvoice(Base):
     reference = Column(String(100), nullable=False, unique=True)
     state = Column(String(30), nullable=False, default='creating')
     created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
+
+class BillingProductionExtraInvoice(Base):
+    __tablename__ = 'billing_production_extra_invoices'
+    company_id = Column(Integer, ForeignKey('companies.id', ondelete='RESTRICT'), primary_key=True)
+    request_id = Column(String(36), primary_key=True)
+    request_hash = Column(String(64), nullable=False, index=True)
+    payment_id = Column(String(100), nullable=True, unique=True)
+    reference = Column(String(100), nullable=False, unique=True)
+    state = Column(String(30), nullable=False, default='creating')
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
