@@ -40,6 +40,7 @@ class PlanInput(BaseModel):
     workshop: str = Field(default='', max_length=200)
     location: str = Field(default='', max_length=200)
     equipment_type: str = Field(default='', max_length=200)
+    equipment_label: str = Field(default='', max_length=200)
     activity: str = Field(min_length=1, max_length=2000)
     responsible: str = Field(min_length=1, max_length=200)
     last_execution: date | None = None
@@ -105,7 +106,7 @@ def build_maintenance_router(auth):
         due=(date.fromisoformat(data['last_execution'])+timedelta(days=data['interval_days'])) if data.get('last_execution') else (date.fromisoformat(data['first_due']) if data.get('first_due') else None)
         remaining=(due-datetime.now(ZoneInfo('America/Sao_Paulo')).date()).days if due else None
         status='Inativo' if not data['active'] else 'Sem programação' if due is None else 'Atrasada' if remaining<0 else 'Vence hoje' if remaining==0 else 'Próximos 7 dias' if remaining<=7 else 'Programada'
-        return dict(data,id=row.id,revision=row.revision,tag=eq.tag,equipment_name=eq.name,next_due=due,days_remaining=remaining,status=status,updated_at=row.updated_at)
+        return dict(data,id=row.id,revision=row.revision,tag=eq.tag,equipment_name=data.get('equipment_label') or eq.name,next_due=due,days_remaining=remaining,status=status,updated_at=row.updated_at)
     def save(db, row):
         try: db.commit()
         except IntegrityError:
