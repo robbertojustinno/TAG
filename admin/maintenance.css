@@ -4,3 +4,11 @@ html[data-theme=dark] .maintenance-page th{background:#23445d;color:#e6edf4}html
 
 /* Full document page, within the authenticated Admin shell. */
 section.maintenance-page{width:100%;max-width:none;max-height:none;display:block;margin:0;overflow:visible}body[data-page=maintenance] .app-main{max-width:1600px;width:100%;margin:auto}body[data-page=maintenance] .maintenance-page th{position:sticky;top:0;z-index:1}
+
+.mp-plan-link{display:inline-block;color:#1675d1;font-weight:750;text-decoration:underline;text-underline-offset:4px;padding:3px 0;cursor:pointer}
+.mp-plan-link:hover{color:#094a86}
+.mp-plan-link:focus-visible{outline:2px solid #1675d1;outline-offset:4px;border-radius:3px}
+.mp-sheet-grid input[readonly]{background:#edf1f5;color:#435466;cursor:default}
+.mp-form-panel{scroll-margin-top:240px}
+html[data-theme=dark] .mp-plan-link{color:#8dc9ff}
+html[data-theme=dark] .mp-sheet-grid input[readonly]{background:#243f53;color:#d3e3ee}
