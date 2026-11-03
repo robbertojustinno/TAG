@@ -58,6 +58,7 @@ if __package__:
     from .admin_api import build_router
     from .company_api import build_company_router
     from .tagging_api import build_tagging_router
+    from .maintenance_import import import_maintenance_from_environment
     from .maintenance_api import build_maintenance_router, migrate_maintenance
     from .category_api import build_category_router
     from .billing_api import build_billing_router
@@ -72,6 +73,7 @@ else:
     from admin_api import build_router
     from company_api import build_company_router
     from tagging_api import build_tagging_router
+    from maintenance_import import import_maintenance_from_environment
     from maintenance_api import build_maintenance_router, migrate_maintenance
     from category_api import build_category_router
     from billing_api import build_billing_router
@@ -85,6 +87,7 @@ try:
     MIGRATION = migrate(engine, ADMIN_USERNAME, ADMIN_PASSWORD, ADMIN_EMAIL)
     with engine.begin() as connection:
         migrate_maintenance(connection)
+    import_maintenance_from_environment(SessionLocal)
 except Exception as migration_error:
     import logging
     import re
