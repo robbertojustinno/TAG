@@ -1,11 +1,11 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
-<head>
+<head><script src="./locale.js?v=20261102-i18n"></script>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>TagCheck Admin</title>
   <link rel="stylesheet" href="./admin-layout.css?v=20261019-layout" />
-  <script src="./theme.js?v=20261017"></script>
+  <script src="./theme.js?v=20261102-i18n"></script>
   <link rel="icon" type="image/png" href="./public/favicon.png">
 <link rel="apple-touch-icon" href="./public/favicon.png">
 </head>
@@ -15,27 +15,28 @@
       <div class="brand">
        <img src="./public/logo.png" alt="Rovix Automation" class="brand-logo" />
         <div>
-          <h1 id="brandTitle">TagCheck • Smart Asset Tracking</h1>
-          <p id="brandSubtitle">Powered by Rovix Automation™ ⚡</p>
+          <h1 id="brandTitle"><span data-tc-text="TagCheck • Smart Asset Tracking">TagCheck • Smart Asset Tracking</span></h1>
+          <p id="brandSubtitle"><span data-tc-text="Powered by Rovix Automation™ ⚡">Powered by Rovix Automation™ ⚡</span></p>
           <p id="activeCompany" class="hidden" aria-live="polite"></p>
           <p id="activeUserProfile" class="hidden" aria-live="polite"></p>
         </div>
       </div>
 
-      <nav class="topbar-actions" aria-label="Ações do TagCheck">
-        <div class="language-switch" role="group" aria-label="Idioma">
-        <button id="langPt" class="secondary-button lang-button active">PT</button>
-        <button id="langEn" class="outline-button lang-button">EN</button>
-        </div>
-        <button id="themeToggle" type="button" class="outline-button" aria-pressed="false">Tema claro</button>
+      <nav class="topbar-actions" aria-label="Ações do TagCheck" data-tc-aria-label="Ações do TagCheck">
+        <div class="language-switch" role="group" aria-label="Idioma" data-tc-aria-label="Idioma">
+<button type="button" id="langPt" class="outline-button lang-button" data-tc-language="pt" lang="pt-BR">Português</button>
+<button type="button" id="langEn" class="outline-button lang-button" data-tc-language="en" lang="en">English</button>
+<button type="button" id="langEs" class="outline-button lang-button" data-tc-language="es" lang="es">Español</button>
+</div>
+        <button id="themeToggle" type="button" class="outline-button" aria-pressed="false"><span data-tc-text="Tema claro">Tema claro</span></button>
         <div class="workspace-actions">
-        <a id="openViewerButton" class="secondary-button" href="#" target="_blank" rel="noopener noreferrer">Viewer</a>
-        <a id="openCampoButton" class="primary-button hidden" href="#" target="_blank" rel="noopener noreferrer">Cadastro Offline</a>
-        <a id="openTaggingButton" class="secondary-button hidden" href="./tagueamento/">Tagueamento</a>
-        <button id="companyAdminButton" class="outline-button hidden">Administração</button>
+        <a id="openViewerButton" class="secondary-button" href="#" target="_blank" rel="noopener noreferrer"><span data-tc-text="Viewer">Viewer</span></a>
+        <a id="openCampoButton" class="primary-button hidden" href="#" target="_blank" rel="noopener noreferrer"><span data-tc-text="Cadastro Offline">Cadastro Offline</span></a>
+        <a id="openTaggingButton" class="secondary-button hidden" href="./tagueamento/"><span data-tc-text="Tagueamento">Tagueamento</span></a>
+        <button id="companyAdminButton" class="outline-button hidden"><span data-tc-text="Administração">Administração</span></button>
         <button id="superadminButton" class="outline-button hidden">Super Admin</button>
         </div>
-        <button id="logoutButton" class="outline-button hidden">Sair</button>
+        <button id="logoutButton" class="outline-button hidden"><span data-tc-text="Sair">Sair</span></button>
       </nav>
     </header>
 
@@ -44,7 +45,7 @@
         <div class="card panel">
           <div class="center-row">
             <div class="loader"></div>
-            <span>Carregando Admin...</span>
+            <span><span data-tc-text="Carregando Admin...">Carregando Admin...</span></span>
           </div>
         </div>
       </section>
@@ -61,14 +62,14 @@
   </script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode/1.5.1/qrcode.min.js"></script>
   <script src="./config.js?v=20260915-asset-categories"></script>
-  <script src="./company-admin.js?v=20261017-customer-access"></script>
-  <script src="./billing-production.js?v=20261023-extra"></script>
-  <script src="./superadmin.js?v=20261019-layout"></script>
+  <script src="./company-admin.js?v=20261102-i18n"></script>
+  <script src="./billing-production.js?v=20261102-i18n"></script>
+  <script src="./superadmin.js?v=20261102-i18n"></script>
   <script src="./offline-store.js?v=20261006-storage-fallback"></script>
-  <script src="./calibration.js?v=20261017-report-template"></script>
-  <script src="./customer-access.js?v=20261019-trials"></script>
-  <script src="./app.js?v=20261019-tagging-access"></script>
-  <script src="./offline-integration.js?v=20261006-storage-fallback"></script>
+  <script src="./calibration.js?v=20261102-i18n"></script>
+  <script src="./customer-access.js?v=20261102-i18n"></script>
+  <script src="./app.js?v=20261102-i18n"></script>
+  <script src="./offline-integration.js?v=20261102-i18n"></script>
   <div class="footer-note">
     Powered by Rovix Automation™ • Roberto Justino
   </div>

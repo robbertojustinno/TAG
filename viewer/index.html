@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="pt-BR">
-  <head>
+  <head><script src="./locale.js?v=20261102-i18n"></script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#0f172a" />
@@ -12,25 +12,29 @@
     <link rel="stylesheet" href="./styles.css" />
     <script src="https://unpkg.com/html5-qrcode" defer></script>
     <script src="./config.js" defer></script>
-    <script src="./app.js" defer></script>
+    <script src="./app.js?v=20261102-i18n" defer></script>
 	<link rel="icon" type="image/png" href="./public/favicon.png">
 	<link rel="apple-touch-icon" href="./public/favicon.png">
   </head>
   <body>
     <div class="app-shell">
       <header class="topbar">
-        <button id="backButton" class="ghost-button hidden" aria-label="Voltar">←</button>
+        <button id="backButton" class="ghost-button hidden" aria-label="Voltar" data-tc-aria-label="Voltar">←</button>
         <div class="brand">
           <img src="./public/logo.png" alt="Rovix Automation" class="brand-logo" />
           <div>
             <h1>TAGCHECK</h1>
-            <p>Consulta rápida • V7</p>
+            <p><span data-tc-text="Consulta rápida • V7">Consulta rápida • V7</span></p>
           </div>
         </div>
-        <div class="topbar-actions">
-          <span id="activeCompany" class="badge" aria-live="polite">Consulta pública</span>
-          <button id="authButton" class="outline-button" type="button">Entrar</button>
-          <button id="installButton" class="outline-button hidden">Instalar</button>
+        <div class="topbar-actions"><div class="language-switch" role="group" aria-label="Idioma" data-tc-aria-label="Idioma">
+<button type="button" id="langPt" class="outline-button lang-button" data-tc-language="pt" lang="pt-BR">Português</button>
+<button type="button" id="langEn" class="outline-button lang-button" data-tc-language="en" lang="en">English</button>
+<button type="button" id="langEs" class="outline-button lang-button" data-tc-language="es" lang="es">Español</button>
+</div>
+          <span id="activeCompany" class="badge" aria-live="polite"><span data-tc-text="Consulta pública">Consulta pública</span></span>
+          <button id="authButton" class="outline-button" type="button"><span data-tc-text="Entrar">Entrar</span></button>
+          <button id="installButton" class="outline-button hidden"><span data-tc-text="Instalar">Instalar</span></button>
         </div>
       </header>
 

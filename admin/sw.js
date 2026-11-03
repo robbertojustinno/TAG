@@ -1,5 +1,16 @@
-const CACHE_NAME = 'tagcheck-admin-offline-multiempresa-v23';
+const CACHE_NAME = 'tagcheck-admin-i18n-20261102';
 const APP_SHELL = [
+  "./locale.js?v=20261102-i18n",
+  "./theme.js?v=20261102-i18n",
+  "./config.js?v=20260915-asset-categories",
+  "./company-admin.js?v=20261102-i18n",
+  "./billing-production.js?v=20261102-i18n",
+  "./superadmin.js?v=20261102-i18n",
+  "./offline-store.js?v=20261006-storage-fallback",
+  "./calibration.js?v=20261102-i18n",
+  "./customer-access.js?v=20261102-i18n",
+  "./app.js?v=20261102-i18n",
+  "./offline-integration.js?v=20261102-i18n",
   './',
   './index.html',
   './admin-layout.css?v=20261019-layout',

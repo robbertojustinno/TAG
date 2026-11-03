@@ -1,5 +1,8 @@
-const CACHE_NAME = 'tagcheck-viewer-readable-details-v1';
+const CACHE_NAME = 'tagcheck-viewer-i18n-20261102';
 const APP_SHELL = [
+  "./locale.js?v=20261102-i18n",
+  "./config.js",
+  "./app.js?v=20261102-i18n",
   './',
   './index.html',
   './styles.css',

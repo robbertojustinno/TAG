@@ -8,9 +8,8 @@
     document.documentElement.style.colorScheme = theme;
     const button = document.getElementById('themeToggle');
     if (button) {
-      const en = document.documentElement.lang.startsWith('en');
-      button.textContent = theme === 'light' ? (en ? 'Dark theme' : 'Tema escuro') : (en ? 'Light theme' : 'Tema claro');
-      button.setAttribute('aria-label', en ? 'Switch color theme' : 'Alternar tema claro e escuro');
+      button.textContent = tcL(theme === 'light' ? 'Tema escuro' : 'Tema claro');
+      button.setAttribute('aria-label', tcL('Alternar tema claro e escuro'));
       button.setAttribute('aria-pressed', String(theme === 'light'));
     }
   }

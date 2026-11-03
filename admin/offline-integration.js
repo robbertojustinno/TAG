@@ -93,8 +93,8 @@
     }
     const count = Array.isArray(rows) ? rows.length : Number(s.pendingOfflineCount || 0);
     const text = navigator.onLine
-      ? (count ? `Sincronização: ${count} pendente(s)` : 'Online — sincronizado')
-      : `Offline — ${count} pendente(s)`;
+      ? (count ? tcF`Sincronização: ${count} pendente(s)` : tcL('Online — sincronizado'))
+      : tcF`Offline — ${count} pendente(s)`;
     if (badge.textContent !== text) badge.textContent = text;
 
     let button = document.getElementById('offlineSyncNow');
@@ -104,7 +104,7 @@
         button.id = 'offlineSyncNow';
         button.type = 'button';
         button.className = 'outline-button';
-        button.textContent = 'Sincronizar agora';
+        button.textContent = tcL('Sincronizar agora');
         button.addEventListener('click', syncQueue);
         row.appendChild(button);
       }
@@ -128,7 +128,7 @@
       serial_number: row.payload?.serial_number || '',
       calibration_date: row.payload?.calibration_date || '',
       next_calibration_date: row.payload?.next_calibration_date || '',
-      status: row.status === 'sync_error' ? 'Erro de sincronização' : 'Pendente de sincronização',
+      status: row.status === 'sync_error' ? tcL('Erro de sincronização') : tcL('Pendente de sincronização'),
       notes: row.payload?.notes || '',
       category_id: row.payload?.category_id || '',
       category_path: [],
@@ -142,21 +142,21 @@
     const s = state();
     const context = activeContext();
     if (!context || !s.authToken || !s.companyId) {
-      throw new Error('Faça login online e selecione a empresa antes de trabalhar offline.');
+      throw new Error(tcL('Faça login online e selecione a empresa antes de trabalhar offline.'));
     }
     const payload = capturePayload();
     const photo = photoFile();
     if (!payload.tag || !payload.name || !photo) {
-      throw new Error('Digite TAG, nome e selecione uma foto.');
+      throw new Error(tcL('Digite TAG, nome e selecione uma foto.'));
     }
     const row = await OFFLINE.enqueueCreate(s.companyId, s.userId, payload, photo);
     s.pendingOfflineCount = Number(s.pendingOfflineCount || 0) + 1;
     s.items = [pendingItem(row), ...(s.items || []).filter(item => item.id !== row.local_id)];
     if (typeof hooks().resetCreateForm === 'function') hooks().resetCreateForm();
     if (typeof hooks().renderCurrentView === 'function') {
-      hooks().renderCurrentView('<div class="notice success">Cadastro salvo offline nesta empresa. Será sincronizado quando a conexão voltar.</div>');
+      hooks().renderCurrentView(tcH('<div class="notice success">Cadastro salvo offline nesta empresa. Será sincronizado quando a conexão voltar.</div>'));
     } else {
-      setFeedback('<div class="notice success">Cadastro salvo offline. Aguardando sincronização.</div>');
+      setFeedback(tcH('<div class="notice success">Cadastro salvo offline. Aguardando sincronização.</div>'));
     }
     await refreshStatus();
   }
@@ -176,7 +176,7 @@
 
     const claimCompany = tokenCompanyId(token);
     if (claimCompany != null && Number(claimCompany) !== Number(s.companyId)) {
-      throw new Error('Empresa da sessão não corresponde ao armazenamento offline.');
+      throw new Error(tcL('Empresa da sessão não corresponde ao armazenamento offline.'));
     }
 
     const rows = await OFFLINE.listQueue(s.companyId);
@@ -191,17 +191,17 @@
           cache: 'no-store'
         });
         if (response.status === 401 || response.status === 403) {
-          await OFFLINE.markQueueItem(s.companyId, row.local_id, 'pending_sync', 'Sessão expirada ou sem permissão.');
+          await OFFLINE.markQueueItem(s.companyId, row.local_id, 'pending_sync', tcL('Sessão expirada ou sem permissão.'));
           break;
         }
         if (!response.ok) {
           const message = await response.text().catch(() => '');
-          await OFFLINE.markQueueItem(s.companyId, row.local_id, 'sync_error', message || 'Cadastro rejeitado pela API.');
+          await OFFLINE.markQueueItem(s.companyId, row.local_id, 'sync_error', message || tcL('Cadastro rejeitado pela API.'));
           continue;
         }
         await OFFLINE.deleteQueueItem(s.companyId, row.local_id);
       } catch (error) {
-        await OFFLINE.markQueueItem(s.companyId, row.local_id, 'pending_sync', error?.message || 'Sem conexão.');
+        await OFFLINE.markQueueItem(s.companyId, row.local_id, 'pending_sync', error?.message || tcL('Sem conexão.'));
         break;
       }
     }
@@ -222,7 +222,7 @@
     event.preventDefault();
     event.stopImmediatePropagation();
     queueCurrentCreate().catch(error => {
-      setFeedback('<div class="notice error">' + String(error.message || error) + '</div>');
+      setFeedback(tcH('<div class="notice error">') + String(tcL(error.message) || error) + tcH('</div>'));
     });
   }, true);
 

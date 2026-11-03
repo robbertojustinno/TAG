@@ -1,15 +1,15 @@
-const METROLOGY_FIELDS = [["measurand", "Grandeza"], ["measurement_unit", "Unidade de medição"], ["range_min", "Faixa mínima"], ["range_max", "Faixa máxima"], ["accuracy_class", "Classe"], ["resolution", "Resolução"], ["ema", "EMA"], ["reading_contribution", "Contribuição estimada da leitura"]];
+const METROLOGY_FIELDS = [["measurand", tcL("Grandeza")], ["measurement_unit", tcL("Unidade de medição")], ["range_min", tcL("Faixa mínima")], ["range_max", tcL("Faixa máxima")], ["accuracy_class", tcL("Classe")], ["resolution", tcL("Resolução")], ["ema", tcL("EMA")], ["reading_contribution", tcL("Contribuição estimada da leitura")]];
 const METROLOGY_HINTS = {
-  measurand: 'Ex.: Pressão', measurement_unit: 'Ex.: mmWS',
-  range_min: 'Ex.: 0', range_max: 'Ex.: 630',
-  accuracy_class: 'Ex.: 2,0 (%)', resolution: 'Ex.: 10',
-  ema: 'Ex.: 12,6', reading_contribution: 'Ex.: 5'
+  measurand: tcL('Ex.: Pressão'), measurement_unit: 'Ex.: mmWS',
+  range_min: tcL('Ex.: 0'), range_max: tcL('Ex.: 630'),
+  accuracy_class: tcL('Ex.: 2,0 (%)'), resolution: tcL('Ex.: 10'),
+  ema: tcL('Ex.: 12,6'), reading_contribution: tcL('Ex.: 5')
 };
 const METROLOGY_HELP = {
- measurand:'Propriedade medida pelo instrumento, como pressão ou temperatura.',measurement_unit:'Unidade usada para expressar a medição. Selecione uma unidade disponível na lista.',range_min:'Menor valor da faixa de medição do instrumento.',range_max:'Maior valor da faixa de medição. Deve ser maior ou igual ao mínimo.',accuracy_class:'Classe informada pelo fabricante. No cálculo percentual, a classe é aplicada à amplitude da faixa.',resolution:'Menor variação que o instrumento consegue indicar, na unidade de medição.',ema:'Erro máximo admissível. Pode ser informado manualmente ou calculado pela amplitude e classe percentual.',reading_contribution:'Contribuição estimada da leitura, na unidade de medição, conforme o método adotado. Não é calculada automaticamente.'
+ measurand:tcL('Propriedade medida pelo instrumento, como pressão ou temperatura.'),measurement_unit:tcL('Unidade usada para expressar a medição. Selecione uma unidade disponível na lista.'),range_min:tcL('Menor valor da faixa de medição do instrumento.'),range_max:tcL('Maior valor da faixa de medição. Deve ser maior ou igual ao mínimo.'),accuracy_class:tcL('Classe informada pelo fabricante. No cálculo percentual, a classe é aplicada à amplitude da faixa.'),resolution:tcL('Menor variação que o instrumento consegue indicar, na unidade de medição.'),ema:tcL('Erro máximo admissível. Pode ser informado manualmente ou calculado pela amplitude e classe percentual.'),reading_contribution:tcL('Contribuição estimada da leitura, na unidade de medição, conforme o método adotado. Não é calculada automaticamente.')
 };
 function fieldHelp(label, explanation) {
- return `<span class="field-caption"><span>${escapeHtml(label)}</span><details class="field-help"><summary aria-label="${escapeHtml('Ajuda sobre ' + label)}" title="${escapeHtml(explanation)}">?</summary><span class="field-help-text">${escapeHtml(explanation)}</span></details></span>`;
+ return tcH`<span class="field-caption"><span>${escapeHtml(label)}</span><details class="field-help"><summary aria-label="${escapeHtml(tcL('Ajuda sobre ') + label)}" title="${escapeHtml(explanation)}">?</summary><span class="field-help-text">${escapeHtml(explanation)}</span></details></span>`;
 }
 const METROLOGY_OPTIONS = {"measurand": ["Pressão", "Pressão diferencial", "Temperatura", "Umidade relativa", "Vazão", "Volume", "Nível", "Massa", "Força", "Torque", "Comprimento", "Deslocamento", "Velocidade", "Rotação", "Tempo", "Frequência", "Tensão elétrica", "Corrente elétrica", "Resistência elétrica", "Potência", "Energia", "Condutividade elétrica", "pH"], "measurement_unit": ["mmWS", "mmH₂O", "cmH₂O", "mH₂O", "mmHg", "inH₂O", "Pa", "kPa", "MPa", "bar", "mbar", "psi", "kgf/cm²", "°C", "°F", "K", "%UR", "%", "L/min", "L/h", "m³/h", "m³/s", "kg/h", "L", "mL", "m³", "mm", "cm", "m", "µm", "g", "kg", "mg", "t", "N", "kN", "N·m", "kgf", "m/s", "km/h", "rpm", "s", "min", "h", "Hz", "kHz", "V", "mV", "A", "mA", "µA", "Ω", "kΩ", "MΩ", "W", "kW", "Wh", "kWh", "µS/cm", "mS/cm", "pH"]};
 function metrologyValues(source) {
@@ -19,16 +19,16 @@ function readMetrology(prefix) {
   return Object.fromEntries(METROLOGY_FIELDS.map(([key]) => [key, document.getElementById(`${prefix}Metro_${key}`)?.value.trim() ?? '']));
 }
 function metrologyHtml(prefix, values) {
-  return `<fieldset class="metrology-block"><legend>Dados Metrológicos</legend><div class="metrology-grid">
+  return tcH`<fieldset class="metrology-block"><legend>Dados Metrológicos</legend><div class="metrology-grid">
     ${METROLOGY_FIELDS.map(([key, label]) => {
       const value = String(values[key] ?? '');
       const options = METROLOGY_OPTIONS[key];
-      const control = options ? `<select id="${prefix}Metro_${key}" class="input"><option value="">Selecione…</option>${[...new Set([...options, ...(value ? [value] : [])])].map(option => `<option value="${escapeHtml(option)}" ${option === value ? 'selected' : ''}>${escapeHtml(option)}</option>`).join('')}</select>` : `<input id="${prefix}Metro_${key}" class="input" placeholder="${escapeHtml(METROLOGY_HINTS[key])}" ${key === 'accuracy_class' ? '' : 'inputmode="decimal"'} value="${escapeHtml(value)}" />`;
-      return `<label>${fieldHelp(label, METROLOGY_HELP[key])}${control}</label>`;
+      const control = options ? tcH`<select id="${prefix}Metro_${key}" class="input"><option value="">Selecione…</option>${[...new Set([...options, ...(value ? [value] : [])])].map(option => tcH`<option value="${escapeHtml(option)}" ${option === value ? 'selected' : ''}>${escapeHtml(tcL(option))}</option>`).join('')}</select>` : `<input id="${prefix}Metro_${key}" class="input" placeholder="${escapeHtml(METROLOGY_HINTS[key])}" ${key === 'accuracy_class' ? '' : 'inputmode="decimal"'} value="${escapeHtml(value)}" />`;
+      return tcH`<label>${fieldHelp(label, METROLOGY_HELP[key])}${control}</label>`;
     }).join('')}
 
   </div>
-  ${Object.entries(METROLOGY_OPTIONS).map(([key, options]) => `<datalist id="${prefix}MetroOptions_${key}">${options.map(value => `<option value="${escapeHtml(value)}"></option>`).join('')}</datalist>`).join('')}
+  ${Object.entries(METROLOGY_OPTIONS).map(([key, options]) => tcH`<datalist id="${prefix}MetroOptions_${key}">${options.map(value => tcH`<option value="${escapeHtml(value)}"></option>`).join('')}</datalist>`).join('')}
   <small>Grandeza e unidade: selecione uma opção da lista.</small>
   <button type="button" id="${prefix}CalculateEma" class="outline-button">Calcular EMA pela classe (%)</button>
   <small>EMA = (faixa máxima − faixa mínima) × classe / 100. O valor pode ser informado manualmente.</small>
@@ -43,12 +43,12 @@ function bindMetrology(prefix) {
     const low = number(values.range_min), high = number(values.range_max), accuracy = number(values.accuracy_class);
     const feedback = document.getElementById(`${prefix}MetroFeedback`);
     if (![low, high, accuracy].every(Number.isFinite) || high < low || accuracy < 0) {
-      feedback.textContent = 'Informe uma faixa válida e a classe percentual.';
+      feedback.textContent = tcL('Informe uma faixa válida e a classe percentual.');
       return;
     }
     document.getElementById(`${prefix}Metro_ema`).value = String(Number(((high-low)*accuracy/100).toFixed(10))).replace('.', ',');
     save();
-    feedback.textContent = 'EMA calculado. Você pode editar o valor manualmente.';
+    feedback.textContent = tcL('EMA calculado. Você pode editar o valor manualmente.');
   });
 }
 
@@ -224,7 +224,7 @@ localStorage.removeItem("tagcheck_admin_auth_token");
 localStorage.removeItem('tagcheck_admin_auth_user');
 
 const state = {
-  language: localStorage.getItem(CONFIG.STORAGE_KEYS.language) || 'pt',
+  language: window.TAGCHECK_I18N.language,
   authToken: sessionStorage.getItem(CONFIG.STORAGE_KEYS.authToken) || '',
   authUser: sessionStorage.getItem(CONFIG.STORAGE_KEYS.authUser) || '',
   companyName: '',
@@ -270,14 +270,11 @@ const state = {
 window.TAGCHECK_ADMIN_STATE = state;
 
 function t(key) {
-  return I18N[state.language][key] || key;
+  return tcL(I18N.pt[key] || key);
 }
 
 function setLanguage(lang) {
-  state.language = lang;
-  localStorage.setItem(CONFIG.STORAGE_KEYS.language, lang);
-  syncHeaderLanguage();
-  renderCurrentView();
+  window.TAGCHECK_I18N.setLanguage(lang);
 }
 
 function syncHeaderLanguage() {
@@ -286,20 +283,19 @@ function syncHeaderLanguage() {
   document.getElementById('brandSubtitle').textContent = state.authToken ? '' : t('brandSubtitle');
   document.getElementById('companyAdminButton').classList.toggle('hidden', !state.authToken || state.role !== 'company_admin' || state.isSuperadmin);
   document.querySelector('.footer-note')?.classList.toggle('hidden', !!state.authToken);
-  document.getElementById('langPt').className = state.language === 'pt'
-    ? 'secondary-button lang-button active'
-    : 'outline-button lang-button';
-  document.getElementById('langEn').className = state.language === 'en'
-    ? 'secondary-button lang-button active'
-    : 'outline-button lang-button';
-  openViewerButton.textContent = t('viewer');
+  for (const [lang, id] of [['pt','langPt'], ['en','langEn'], ['es','langEs']]) {
+    const button = document.getElementById(id), active = state.language === lang;
+    button.className = active ? 'secondary-button lang-button active' : 'outline-button lang-button';
+    button.setAttribute('aria-pressed', String(active));
+  }
+  openViewerButton.textContent = tcL('Viewer');
   if (openCampoButton) {
-    openCampoButton.textContent = state.language === 'pt' ? 'Cadastro Offline' : 'Offline Registration';
+    openCampoButton.textContent = tcL('Cadastro Offline');
     openCampoButton.classList.toggle('hidden', !state.authToken);
   }
   const taggingButton = document.getElementById('openTaggingButton');
   if (taggingButton) {
-    taggingButton.textContent = state.language === 'en' ? 'Tagging' : 'Tagueamento';
+    taggingButton.textContent = tcL('Tagueamento');
     taggingButton.classList.toggle('hidden', !state.authToken);
   }
   logoutButton.textContent = t('logout');
@@ -309,14 +305,11 @@ function syncHeaderLanguage() {
   company.classList.toggle('hidden', !state.authToken || !state.companyName);
   const profile = document.getElementById('activeUserProfile');
   if (profile) {
-    const labels = state.language === 'en'
-      ? {company_admin:'Administrator', supervisor:'Supervisor', operator:'Operator', viewer:'Read only'}
-      : {company_admin:'Administrador', supervisor:'Supervisor', operator:'Operador', viewer:'Somente leitura'};
-    const role = state.isSuperadmin ? (state.language === 'en' ? 'Super Administrator' : 'Superadministrador') : (labels[state.role] || '');
-    profile.textContent = state.authToken ? `${state.language === 'en' ? 'User' : 'Usuário'}: ${state.authUser || '—'} · ${state.language === 'en' ? 'Profile' : 'Perfil'}: ${role || '—'}` : '';
+    const labels = {company_admin:'Administrador', supervisor:'Supervisor', operator:'Operador', viewer:'Somente leitura'};
+    const role = state.isSuperadmin ? tcL('Superadministrador') : tcL(labels[state.role] || '');
+    profile.textContent = state.authToken ? `${tcL('Usuário')}: ${state.authUser || '—'} · ${tcL('Perfil')}: ${role || '—'}` : '';
     profile.classList.toggle('hidden', !state.authToken || !!state.pendingPassword);
   }
-
   document.getElementById('superadminButton').classList.toggle('hidden', !state.authToken || !state.isSuperadmin);
 }
 
@@ -512,7 +505,7 @@ function requirePasswordChange(token) {
 
 function renderPasswordChange() {
   syncHeaderLanguage();
-  app.innerHTML = `<section class="login-shell"><form id="changePasswordForm" class="card login-card">
+  app.innerHTML = tcH`<section class="login-shell"><form id="changePasswordForm" class="card login-card">
     <h2 class="login-title">Defina sua nova senha</h2>
     <p class="login-subtitle">Use uma senha própria com pelo menos 12 caracteres.</p>
     <div class="login-stack">
@@ -538,13 +531,13 @@ function renderPasswordChange() {
       });
       const result = await response.json();
       if (token !== state.pendingPassword) return;
-      if (!response.ok) throw new Error(typeof result.detail === 'string' ? result.detail : 'Verifique as senhas. A nova senha deve ter pelo menos 12 caracteres.');
+      if (!response.ok) throw new Error(typeof result.detail === 'string' ? result.detail : tcL('Verifique as senhas. A nova senha deve ter pelo menos 12 caracteres.'));
       state.pendingPassword = '';
       sessionStorage.removeItem(CONFIG.STORAGE_KEYS.authToken + '.password_change');
       syncHeaderLanguage();
       await finishLogin(result);
     } catch (error) {
-      if (token === state.pendingPassword) document.getElementById('passwordFeedback').textContent = error.message;
+      if (token === state.pendingPassword) document.getElementById('passwordFeedback').textContent = tcL(error.message);
       else renderCurrentView();
     } finally {
       form.reset();
@@ -554,7 +547,7 @@ function renderPasswordChange() {
 }
 
 function renderCompanySelection(notice = '') {
-  app.innerHTML = `
+  app.innerHTML = tcH`
     <section class="login-shell">
       <form id="companyForm" class="card login-card">
         <div><h2 class="login-title">${t('selectCompany')}</h2>
@@ -562,7 +555,7 @@ function renderCompanySelection(notice = '') {
         <label for="companySelect">${t('company')}</label>
         <select id="companySelect" class="input" required>
           ${state.pendingSelection.companies.map(company =>
-            `<option value="${escapeHtml(company.id)}">${escapeHtml(company.name)}</option>`).join('')}
+            tcH`<option value="${escapeHtml(company.id)}">${escapeHtml(company.name)}</option>`).join('')}
         </select>
         <div class="inline-actions">
           <button id="selectCompanyButton" class="primary-button" type="submit">${t('loginButton')}</button>
@@ -586,7 +579,7 @@ function renderCompanySelection(notice = '') {
       if (!response.ok) throw new Error(t(response.status === 403 ? 'companyDenied' : 'loginError'));
       await finishLogin(await response.json());
     } catch (error) {
-      renderCurrentView(`<div class="notice error">${escapeHtml(error.message)}</div>`);
+      renderCurrentView(tcH`<div class="notice error">${escapeHtml(tcL(error.message))}</div>`);
     }
   });
 }
@@ -622,7 +615,7 @@ async function loadItems() {
     photo: row.photo ? URL.createObjectURL(row.photo) : null,
     offline_pending: true,
     offline_status: row.status,
-    status: row.status === 'sync_error' ? 'Erro de sincronização' : 'Pendente de sincronização'
+    status: row.status === 'sync_error' ? tcL('Erro de sincronização') : tcL('Pendente de sincronização')
   }));
   state.items = [...localItems, ...serverItems];
   return state.items;
@@ -657,7 +650,7 @@ function categoryOptions(selected = '') {
   rows.forEach(row => byParent.set(row.parent_id || 0, [...(byParent.get(row.parent_id || 0) || []), row]));
   const result = [];
   const walk = (parent, depth) => (byParent.get(parent) || []).forEach(row => {
-    result.push(`<option value="${escapeHtml(row.id)}" ${String(row.id) === String(selected) ? 'selected' : ''}>${'&nbsp;'.repeat(depth * 4)}${escapeHtml(row.name)}${row.asset_count ? ` (${row.asset_count})` : ''}</option>`);
+    result.push(tcH`<option value="${escapeHtml(row.id)}" ${String(row.id) === String(selected) ? 'selected' : ''}>${'&nbsp;'.repeat(depth * 4)}${escapeHtml(row.name)}${row.asset_count ? ` (${row.asset_count})` : ''}</option>`);
     walk(row.id, depth + 1);
   });
   walk(0, 0);
@@ -669,10 +662,10 @@ function categoryManagerHtml() {
   const node = (c, depth = 0) => {
     const open = state.expandedCategories.has(c.id);
     const children = (c.children || []).map(child => node(child, depth + 1)).join('');
-    return `<div class="category-node" style="--depth:${depth}"><button type="button" class="tree-toggle" data-category-expand="${c.id}" aria-expanded="${open}">${children ? (open ? '▾' : '▸') : '·'}</button><button type="button" class="category-name ${String(state.selectedCategoryId) === String(c.id) ? 'selected' : ''}" data-category-id="${c.id}">${escapeHtml(c.name)} <span>(${c.asset_count || 0})</span></button>${canManageUnits() ? `<details class="category-actions"><summary aria-label="Ações">⋮</summary><div class="category-menu"><button type="button" data-category-sub="${c.id}">Nova subcategoria</button><button type="button" data-category-edit="${c.id}">Editar</button><button type="button" data-category-active="${c.id}" data-active="${!c.active}">${c.active ? 'Desativar' : 'Ativar'}</button><button type="button" data-category-delete="${c.id}">Excluir</button></div></details>` : ''}${open && children ? `<div class="category-children">${children}</div>` : ''}</div>`;
+    return tcH`<div class="category-node" style="--depth:${depth}"><button type="button" class="tree-toggle" data-category-expand="${c.id}" aria-expanded="${open}">${children ? (open ? '▾' : '▸') : '·'}</button><button type="button" class="category-name ${String(state.selectedCategoryId) === String(c.id) ? 'selected' : ''}" data-category-id="${c.id}">${escapeHtml(c.name)} <span>(${c.asset_count || 0})</span></button>${canManageUnits() ? tcH`<details class="category-actions"><summary aria-label="Ações">⋮</summary><div class="category-menu"><button type="button" data-category-sub="${c.id}">Nova subcategoria</button><button type="button" data-category-edit="${c.id}">Editar</button><button type="button" data-category-active="${c.id}" data-active="${!c.active}">${c.active ? tcL('Desativar') : tcL('Ativar')}</button><button type="button" data-category-delete="${c.id}">Excluir</button></div></details>` : ''}${open && children ? tcH`<div class="category-children">${children}</div>` : ''}</div>`;
   };
-  const form = canManageUnits() ? `<div id="categoryModal" class="category-modal" hidden><form id="categoryForm" class="compact-form"><label>Nome<input id="categoryNameInput" class="input" required maxlength="200"/></label><label>Categoria pai<select id="categoryParentInput" class="input"><option value="">Nenhuma — categoria raiz</option>${categoryOptions('')}</select></label><div class="inline-actions"><button class="primary-button compact-button" type="submit">Salvar</button><button id="cancelCategoryForm" class="outline-button compact-button" type="button">Cancelar</button></div></form></div>` : '';
-  return `<div class="card panel asset-manager"><div class="inline-actions compact-heading" style="justify-content:space-between"><h3>Gerenciador de ativos</h3>${canManageUnits() ? '<button id="newCategoryButton" class="primary-button compact-button" type="button">+ Categoria</button>' : ''}</div>${form}
+  const form = canManageUnits() ? tcH`<div id="categoryModal" class="category-modal" hidden><form id="categoryForm" class="compact-form"><label>Nome<input id="categoryNameInput" class="input" required maxlength="200"/></label><label>Categoria pai<select id="categoryParentInput" class="input"><option value="">Nenhuma — categoria raiz</option>${categoryOptions('')}</select></label><div class="inline-actions"><button class="primary-button compact-button" type="submit">Salvar</button><button id="cancelCategoryForm" class="outline-button compact-button" type="button">Cancelar</button></div></form></div>` : '';
+  return tcH`<div class="card panel asset-manager"><div class="inline-actions compact-heading" style="justify-content:space-between"><h3>Gerenciador de ativos</h3>${canManageUnits() ? tcH('<button id="newCategoryButton" class="primary-button compact-button" type="button">+ Categoria</button>') : ''}</div>${form}
     <div class="asset-manager-grid"><div class="category-column"><div class="category-tree"><button type="button" class="category-name all-assets ${!state.selectedCategoryId ? 'selected' : ''}" data-all-categories="true">TODOS OS ATIVOS</button>${state.categoryTree.map(c => node(c)).join('')}</div></div><div class="asset-content-column"><div class="compact-category-filter"><label for="categoryFilter">Categoria</label><select id="categoryFilter" class="input"><option value="">Todos os ativos</option>${categoryOptions(state.selectedCategoryId)}</select></div><div><p class="subtle">Selecione uma categoria para mostrar ativos do ramo.</p><div id="categoryFeedback"></div></div></div></div></div>`;
 }
 async function loadUnits() {
@@ -763,6 +756,7 @@ async function deleteEquipment(id) {
 function viewerUrlForTag(tag) {
   const url = new URL(CONFIG.VIEWER_BASE_URL);
   url.searchParams.set('tag', tag);
+  url.searchParams.set('lang', state.language);
   return url.toString();
 }
 
@@ -781,7 +775,7 @@ DADOS MINIMOS PORQUE TA OFFLINE`;
 
 function qrHtml(tag) {
   const qrId = `qr-${String(tag).replace(/[^a-zA-Z0-9_-]/g, '')}`;
-  return `
+  return tcH`
     <div>
       <div class="qr-box"><canvas id="${qrId}"></canvas></div>
       <a class="qr-link" href="${viewerUrlForTag(tag)}" target="_blank" rel="noopener noreferrer">${t('openSheet')}</a>
@@ -790,12 +784,12 @@ function qrHtml(tag) {
 }
 
 function statusPill(status) {
-  return `<span class="status-pill status-ok">${escapeHtml(status || t('active'))}</span>`;
+  return tcH`<span class="status-pill status-ok">${escapeHtml(status || t('active'))}</span>`;
 }
 
 function photoHtml(item) {
   if (!item.photo) {
-    return `<div class="thumb-fallback">${t('noImage')}</div>`;
+    return tcH`<div class="thumb-fallback">${t('noImage')}</div>`;
   }
   return `<img class="thumb" src="${escapeHtml(item.photo)}" alt="${escapeHtml(item.name)}" />`;
 }
@@ -806,14 +800,14 @@ function getItemById(id) {
 
 function createPreviewBlock() {
   if (!state.createPreviewUrl) {
-    return `
+    return tcH`
       <div class="image-upload-box empty">
         <div class="image-upload-placeholder">${t('preview')}</div>
       </div>
     `;
   }
 
-  return `
+  return tcH`
     <div class="image-upload-box">
       <img class="image-preview" src="${escapeHtml(state.createPreviewUrl)}" alt="${t('selectedPhoto')}" />
     </div>
@@ -824,14 +818,14 @@ function createPreviewBlock() {
 }
 
 function searchResultHtml() {
-  return `<div id="searchFeedback"></div>`;
+  return tcH`<div id="searchFeedback"></div>`;
 }
 
 function createAdditionalFields(prefix, values) {
   const calibrationType = 'date';
   const nextCalibrationType = 'date';
 
-  return `
+  return tcH`
     <div class="grid-2">
       <input id="${prefix}TypeInput" class="input" placeholder="${t('equipmentType')}" value="${escapeHtml(values.equipment_type || '')}" />
       <input id="${prefix}SectorInput" class="input" placeholder="${t('sector')}" value="${escapeHtml(values.sector || '')}" />
@@ -870,7 +864,7 @@ function renderEditableRow(item) {
     previewUrl: item.photo || ''
   };
 
-  return `
+  return tcH`
     <tr class="edit-row">
       <td class="code-soft">${escapeHtml(item.id)}</td>
       <td colspan="6">
@@ -885,7 +879,7 @@ function renderEditableRow(item) {
           <div class="edit-photo-stack">
             ${draft.previewUrl
               ? `<img class="thumb thumb-large" src="${escapeHtml(draft.previewUrl)}" alt="${escapeHtml(draft.name)}" />`
-              : `<div class="thumb-fallback thumb-large">${t('noImage')}</div>`}
+              : tcH`<div class="thumb-fallback thumb-large">${t('noImage')}</div>`}
             <input id="editPhotoInput" class="file-input compact-file" type="file" accept="image/*" />
           </div>
 
@@ -901,7 +895,7 @@ function renderEditableRow(item) {
 
 function renderRows(items) {
   if (!items.length) {
-    return `
+    return tcH`
       <tr>
         <td colspan="7">
           <div class="empty-state">${t('noItems')}</div>
@@ -916,10 +910,10 @@ function renderRows(items) {
     }
 
     const actions = item.offline_pending
-      ? `<span class="muted">${escapeHtml(item.offline_status === 'sync_error' ? 'Erro — tentar sincronizar' : 'Aguardando internet')}</span>`
-      : `<button class="secondary-button" onclick="downloadMasterReport(${item.id})">Relatório mestre</button>${canWriteEquipment() ? `<button class="secondary-button" onclick="startEditItem(${item.id})">${t('edit')}</button>` : ''}${canDeleteEquipment() ? `<button class="danger-button" onclick="askDeleteItem(${item.id})">${t('delete')}</button>` : ''}`;
+      ? tcH`<span class="muted">${escapeHtml(item.offline_status === 'sync_error' ? tcL('Erro — tentar sincronizar') : tcL('Aguardando internet'))}</span>`
+      : tcH`<button class="secondary-button" onclick="downloadMasterReport(${item.id})">Relatório mestre</button>${canWriteEquipment() ? tcH`<button class="secondary-button" onclick="startEditItem(${item.id})">${t('edit')}</button>` : ''}${canDeleteEquipment() ? tcH`<button class="danger-button" onclick="askDeleteItem(${item.id})">${t('delete')}</button>` : ''}`;
 
-    return `
+    return tcH`
       <tr>
         <td class="code-soft">${escapeHtml(item.id)}</td>
         <td><strong>${escapeHtml(item.tag)}</strong></td>
@@ -928,11 +922,11 @@ function renderRows(items) {
           <div class="muted">${escapeHtml(item.equipment_type || '')}</div>
           <div class="muted">${escapeHtml(item.model || '')}</div>
           <div class="muted">${escapeHtml(item.serial_number || '')}</div>
-          <div class="muted">${escapeHtml((item.category_path || []).join(' > ') || 'Sem categoria')}</div>
+          <div class="muted">${escapeHtml((item.category_path || []).join(' > ') || tcL('Sem categoria'))}</div>
         </td>
         <td>${photoHtml(item)}</td>
         <td>${statusPill(item.status)}</td>
-        <td>${item.offline_pending ? '<span class="muted">Após sincronizar</span>' : qrHtml(item.tag)}</td>
+        <td>${item.offline_pending ? tcH('<span class="muted">Após sincronizar</span>') : qrHtml(item.tag)}</td>
         <td><div class="inline-actions">${actions}</div></td>
       </tr>
     `;
@@ -944,7 +938,7 @@ function renderDeleteConfirm() {
   const item = getItemById(state.deleteTargetId);
   if (!item) return '';
 
-  return `
+  return tcH`
     <div class="card panel danger-panel">
       <h3>${t('deleteConfirmTitle')}</h3>
       <div class="notice error">
@@ -960,7 +954,7 @@ function renderDeleteConfirm() {
 }
 
 function renderLogin(notice = '') {
-  app.innerHTML = `
+  app.innerHTML = tcH`
     <section class="login-shell">
       <form id="loginForm" class="card login-card">
         <div>
@@ -991,10 +985,10 @@ function renderApp(notice = '') {
   const withPhoto = state.items.filter((x) => !!x.photo).length;
   const noPhoto = total - withPhoto;
   const apiBadge = state.apiReachable
-    ? `<span id="apiStatusBadge" class="badge">${t('apiOk')}</span>`
-    : `<span id="apiStatusBadge" class="badge">${t('apiFail')}</span>`;
+    ? tcH`<span id="apiStatusBadge" class="badge">${t('apiOk')}</span>`
+    : tcH`<span id="apiStatusBadge" class="badge">${t('apiFail')}</span>`;
 
-  app.innerHTML = `
+  app.innerHTML = tcH`
     <section class="screen">
       <div class="card hero">
         <div>
@@ -1005,7 +999,7 @@ function renderApp(notice = '') {
         <div class="badge-row">
           <span class="badge">${t('version')} ${escapeHtml(CONFIG.APP_VERSION)}</span>
           ${apiBadge}
-          ${state.editingId ? `<span class="badge">${t('editMode')}</span>` : ''}
+          ${state.editingId ? tcH`<span class="badge">${t('editMode')}</span>` : ''}
         </div>
 
         <div class="grid-3">
@@ -1025,7 +1019,7 @@ function renderApp(notice = '') {
       </div>
 
       <div class="grid-2">
-        ${canWriteEquipment() ? `<div class="card panel">
+        ${canWriteEquipment() ? tcH`<div class="card panel">
           <h3>${t('formTitle')}</h3>
           <input id="tagInput" class="input" placeholder="${t('tag')}" value="${escapeHtml(state.createForm.tag)}" />
           <input id="nameInput" class="input" placeholder="${t('name')}" value="${escapeHtml(state.createForm.name)}" />
@@ -1050,7 +1044,7 @@ function renderApp(notice = '') {
           </div>
           ${searchResultHtml()}
         </div>
-        ${canWriteEquipment() ? `<div class="card panel create-metrology-card">${metrologyHtml('create', state.createForm)}</div>` : ''}
+        ${canWriteEquipment() ? tcH`<div class="card panel create-metrology-card">${metrologyHtml('create', state.createForm)}</div>` : ''}
         ${categoryManagerHtml()}</div>
       </div>
 
@@ -1058,20 +1052,20 @@ function renderApp(notice = '') {
         <label for="unitFilter">Unidade</label>
         <select id="unitFilter" class="input">
           <option value="">Todas as unidades</option>
-          ${state.units.map(unit => `<option value="${escapeHtml(unit.id)}" ${String(unit.id) === String(state.selectedUnitId) ? 'selected' : ''}>${escapeHtml(unit.name)}</option>`).join('')}
+          ${state.units.map(unit => tcH`<option value="${escapeHtml(unit.id)}" ${String(unit.id) === String(state.selectedUnitId) ? 'selected' : ''}>${escapeHtml(unit.name)}</option>`).join('')}
         </select>
         <small class="subtle">Equipamentos sem unidade aparecem em “Todas as unidades”.</small>
       </div>
 
-      ${canManageUnits() ? `<div class="card panel" id="unitManagement">
+      ${canManageUnits() ? tcH`<div class="card panel" id="unitManagement">
         <h3>Unidades</h3>
         <form id="unitCreateForm" class="inline-actions">
           <input id="unitName" class="input" aria-label="Nome da unidade" placeholder="Nome da unidade" required maxlength="200" />
           <input id="unitSlug" class="input" aria-label="Código da unidade" placeholder="Código da unidade" required maxlength="100" />
           <button class="primary-button" type="submit">Cadastrar unidade</button>
         </form>
-        ${state.units.map(unit => `<div class="inline-actions"><span>${escapeHtml(unit.name)}</span>
-          <button class="outline-button" data-unit-toggle="${escapeHtml(unit.id)}" data-active="${unit.active ? 'false' : 'true'}">${unit.active ? 'Desativar' : 'Ativar'}</button></div>`).join('')}
+        ${state.units.map(unit => tcH`<div class="inline-actions"><span>${escapeHtml(unit.name)}</span>
+          <button class="outline-button" data-unit-toggle="${escapeHtml(unit.id)}" data-active="${unit.active ? 'false' : 'true'}">${unit.active ? tcL('Desativar') : tcL('Ativar')}</button></div>`).join('')}
         <div id="unitFeedback" role="alert"></div>
       </div>` : ''}
       ${renderDeleteConfirm()}
@@ -1154,11 +1148,11 @@ function bindLoginEvents() {
     const feedback = document.getElementById('loginFeedback');
 
     if (!username || !password) {
-      feedback.innerHTML = `<div class="notice error">${t('loginError')}</div>`;
+      feedback.innerHTML = tcH`<div class="notice error">${t('loginError')}</div>`;
       return;
     }
 
-    feedback.innerHTML = `<div class="notice">${t('loginLoading')}</div>`;
+    feedback.innerHTML = tcH`<div class="notice">${t('loginLoading')}</div>`;
     document.getElementById('loginButton').disabled = true;
 
     try {
@@ -1170,7 +1164,7 @@ function bindLoginEvents() {
         await finishLogin(result);
       }
     } catch (error) {
-      renderCurrentView(`<div class="notice error">${escapeHtml(error.message || t('loginError'))}</div>`);
+      renderCurrentView(tcH`<div class="notice error">${escapeHtml(tcL(error.message) || t('loginError'))}</div>`);
     }
   });
 }
@@ -1184,12 +1178,12 @@ function bindEvents() {
       const response = await fetchWithTimeout(buildUrl(CONFIG.API_BASE_URL, path), {
         method, headers: getAuthHeaders({'Content-Type': 'application/json'}), body: JSON.stringify(data)
       });
-      if (!response.ok) throw new Error('Não foi possível salvar a unidade. Verifique os dados e permissões.');
+      if (!response.ok) throw new Error(tcL('Não foi possível salvar a unidade. Verifique os dados e permissões.'));
       await loadUnits();
       if (state.authToken) renderApp();
     } catch (error) {
       const feedback = document.getElementById('unitFeedback');
-      if (feedback) feedback.textContent = error.message;
+      if (feedback) feedback.textContent = tcL(error.message);
     }
   };
   document.getElementById('unitCreateForm')?.addEventListener('submit', event => {
@@ -1207,14 +1201,14 @@ function bindEvents() {
       await loadItems();
       renderApp();
     } catch (error) {
-      renderApp(`<div class="notice error">${escapeHtml(error.message || t('listError'))}</div>`);
+      renderApp(tcH`<div class="notice error">${escapeHtml(tcL(error.message) || t('listError'))}</div>`);
     }
   });
 
   document.getElementById('categoryFilter')?.addEventListener('change', async event => {
     state.selectedCategoryId = event.target.value;
     try { await loadItems(); renderApp(); }
-    catch (error) { renderApp(`<div class="notice error">${escapeHtml(error.message || t('listError'))}</div>`); }
+    catch (error) { renderApp(tcH`<div class="notice error">${escapeHtml(tcL(error.message) || t('listError'))}</div>`); }
   });
   document.querySelectorAll('[data-category-id]').forEach(button => button.addEventListener('click', async () => {
     state.selectedCategoryId = button.dataset.categoryId;
@@ -1231,9 +1225,9 @@ function bindEvents() {
   document.getElementById('newCategoryButton')?.addEventListener('click', () => showCategoryModal(''));
   document.querySelectorAll('[data-category-edit]').forEach(button => button.addEventListener('click', async () => {
     const category = state.categories.find(item => String(item.id) === button.dataset.categoryEdit);
-    const name = window.prompt('Nome da categoria', category?.name || '');
+    const name = window.prompt(tcL('Nome da categoria'), category?.name || '');
     if (!name || !name.trim()) return;
-    const parentValue = window.prompt('ID da categoria pai (vazio para raiz)', category?.parent_id || '');
+    const parentValue = window.prompt(tcL('ID da categoria pai (vazio para raiz)'), category?.parent_id || '');
     const response = await fetchWithTimeout(buildUrl(CONFIG.API_BASE_URL, `/asset-categories/${button.dataset.categoryEdit}`), {
       method: 'PATCH', headers: getAuthHeaders({'Content-Type': 'application/json'}), body: JSON.stringify({name: name.trim(), parent_id: Number(parentValue) || null})
     });
@@ -1241,7 +1235,7 @@ function bindEvents() {
   }));
   document.getElementById('newSubcategoryButton')?.addEventListener('click', async () => {
     const parentId = state.selectedCategoryId || null;
-    const name = window.prompt('Nome da subcategoria');
+    const name = window.prompt(tcL('Nome da subcategoria'));
     if (!name || !name.trim() || !parentId) return;
     const response = await fetchWithTimeout(buildUrl(CONFIG.API_BASE_URL, '/asset-categories'), { method: 'POST', headers: getAuthHeaders({'Content-Type': 'application/json'}), body: JSON.stringify({name: name.trim(), parent_id: Number(parentId)}) });
     if (response.ok) { await loadCategories(); renderApp(); }
@@ -1263,9 +1257,9 @@ function bindEvents() {
   }));  document.querySelectorAll('[data-category-sub]').forEach(button => button.addEventListener('click', () => showCategoryModal(button.dataset.categorySub)));
   document.querySelectorAll('[data-category-delete]').forEach(button => button.addEventListener('click', async () => {
     const category = state.categories.find(item => String(item.id) === button.dataset.categoryDelete);
-    if (!category || !window.confirm("Excluir a categoria '" + category.name + "'?")) return;
+    if (!category || !window.confirm(tcL("Excluir a categoria '") + category.name + "'?")) return;
     const response = await fetchWithTimeout(buildUrl(CONFIG.API_BASE_URL, '/asset-categories/' + button.dataset.categoryDelete), { method: 'DELETE', headers: getAuthHeaders() });
-    if (!response.ok) { const body = await response.json().catch(() => ({})); const feedback = document.getElementById('categoryFeedback'); if (feedback) feedback.textContent = body.detail || 'Não foi possível excluir a categoria.'; return; }
+    if (!response.ok) { const body = await response.json().catch(() => ({})); const feedback = document.getElementById('categoryFeedback'); if (feedback) feedback.textContent = body.detail || tcL('Não foi possível excluir a categoria.'); return; }
     if (String(state.selectedCategoryId) === button.dataset.categoryDelete) state.selectedCategoryId = '';
     await loadCategories(); await loadItems(); renderApp();
   }));
@@ -1298,7 +1292,7 @@ function bindEvents() {
     const feedback = document.getElementById('createFeedback');
 
     if (!tag || !name || !photoFile) {
-      feedback.innerHTML = `<div class="notice error">${t('typeTag')}</div>`;
+      feedback.innerHTML = tcH`<div class="notice error">${t('typeTag')}</div>`;
       return;
     }
 
@@ -1320,15 +1314,15 @@ function bindEvents() {
     formData.append('notes', state.createForm.notes);
     formData.append('category_id', state.createForm.category_id || '');
 
-    feedback.innerHTML = `<div class="notice">${t('creating')}</div>`;
+    feedback.innerHTML = tcH`<div class="notice">${t('creating')}</div>`;
 
     try {
       await createEquipment(formData);
       resetCreateForm();
       await loadItems();
-      renderApp(`<div class="notice success">${t('createSuccess')}</div>`);
+      renderApp(tcH`<div class="notice success">${t('createSuccess')}</div>`);
     } catch (error) {
-      feedback.innerHTML = `<div class="notice error">${escapeHtml(error.message || t('createError'))}</div>`;
+      feedback.innerHTML = tcH`<div class="notice error">${escapeHtml(tcL(error.message) || t('createError'))}</div>`;
     }
   });
 
@@ -1336,16 +1330,16 @@ function bindEvents() {
     const tag = document.getElementById('searchTagInput').value.trim();
     const feedback = document.getElementById('searchFeedback');
 
-    feedback.innerHTML = `<div class="notice">${t('apiCheck')}</div>`;
+    feedback.innerHTML = tcH`<div class="notice">${t('apiCheck')}</div>`;
 
     try {
       const item = await searchByTag(tag);
-      feedback.innerHTML = `
+      feedback.innerHTML = tcH`
         <div class="search-result-card">
           <div class="search-result-media">
             ${item.photo
               ? `<img class="search-result-thumb" src="${escapeHtml(item.photo)}" alt="${escapeHtml(item.name)}" />`
-              : `<div class="thumb-fallback thumb-large">${t('noImage')}</div>`}
+              : tcH`<div class="thumb-fallback thumb-large">${t('noImage')}</div>`}
           </div>
           <div class="search-result-body">
             <div class="search-result-label">${t('searchResult')}</div>
@@ -1355,25 +1349,25 @@ function bindEvents() {
             <div class="muted">${escapeHtml(item.calibration_date || '')} → ${escapeHtml(item.next_calibration_date || '')}</div>
             <div class="inline-actions">
               <a class="secondary-button" href="${viewerUrlForTag(item.tag)}" target="_blank" rel="noopener noreferrer">${t('openViewer')}</a>
-              ${item.photo ? `<a class="outline-button" href="${escapeHtml(item.photo)}" target="_blank" rel="noopener noreferrer">${t('photo')}</a>` : ''}
+              ${item.photo ? tcH`<a class="outline-button" href="${escapeHtml(item.photo)}" target="_blank" rel="noopener noreferrer">${t('photo')}</a>` : ''}
             </div>
           </div>
         </div>
       `;
     } catch (error) {
-      feedback.innerHTML = `<div class="notice error">${escapeHtml(error.message || t('searchError'))}</div>`;
+      feedback.innerHTML = tcH`<div class="notice error">${escapeHtml(tcL(error.message) || t('searchError'))}</div>`;
     }
   });
 
   document.getElementById('refreshButton')?.addEventListener('click', async () => {
     const feedback = document.getElementById('searchFeedback');
-    feedback.innerHTML = `<div class="notice">${t('listLoading')}</div>`;
+    feedback.innerHTML = tcH`<div class="notice">${t('listLoading')}</div>`;
 
     try {
       await loadItems();
       renderApp();
     } catch (error) {
-      feedback.innerHTML = `<div class="notice error">${escapeHtml(error.message || t('listError'))}</div>`;
+      feedback.innerHTML = tcH`<div class="notice error">${escapeHtml(tcL(error.message) || t('listError'))}</div>`;
     }
   });
 
@@ -1474,9 +1468,9 @@ function bindEvents() {
       state.editingId = null;
       state.editDraft = null;
       await loadItems();
-      renderApp(`<div class="notice success">${t('updateSuccess')}</div>`);
+      renderApp(tcH`<div class="notice success">${t('updateSuccess')}</div>`);
     } catch (error) {
-      renderApp(`<div class="notice error">${escapeHtml(error.message || t('updateError'))}</div>`);
+      renderApp(tcH`<div class="notice error">${escapeHtml(tcL(error.message) || t('updateError'))}</div>`);
     }
   });
 
@@ -1493,9 +1487,9 @@ function bindEvents() {
       await deleteEquipment(state.deleteTargetId);
       state.deleteTargetId = null;
       await loadItems();
-      renderApp(`<div class="notice success">${t('deleteSuccess')}</div>`);
+      renderApp(tcH`<div class="notice success">${t('deleteSuccess')}</div>`);
     } catch (error) {
-      renderApp(`<div class="notice error">${escapeHtml(error.message || t('deleteError'))}</div>`);
+      renderApp(tcH`<div class="notice error">${escapeHtml(tcL(error.message) || t('deleteError'))}</div>`);
     }
   });
 
@@ -1613,12 +1607,12 @@ function renderCurrentView(notice = '') {
 }
 
 async function superadminRequest(path, method = 'GET', data, blob = false) {
-  if (!state.authToken || !state.isSuperadmin || !state.showSuperadmin) throw new Error('Acesso não autorizado.');
+  if (!state.authToken || !state.isSuperadmin || !state.showSuperadmin) throw new Error(tcL('Acesso não autorizado.'));
   return companyRequest(path, method, data, blob);
 }
 
 async function companyRequest(path, method = 'GET', data, blob = false) {
-  if (!state.authToken) throw new Error('Entre novamente.');
+  if (!state.authToken) throw new Error(tcL('Entre novamente.'));
   const multipart = data instanceof FormData;
   const response = await fetchWithTimeout(buildUrl(CONFIG.API_BASE_URL, path), {
     method, headers: getAuthHeaders(multipart ? {} : { 'Content-Type': 'application/json' }),
@@ -1632,11 +1626,11 @@ async function companyRequest(path, method = 'GET', data, blob = false) {
     renderCurrentView();
   }
   if (!response.ok) {
-    const messages = {401: 'Sessão expirada. Entre novamente.', 403: 'Acesso não autorizado.',
-      404: 'Registro não encontrado.', 409: 'Não foi possível salvar. Verifique os dados ou contate o suporte administrativo.',
-      422: 'Verifique os campos informados, o domínio do e-mail e o formato da imagem.'};
+    const messages = {401: tcL('Sessão expirada. Entre novamente.'), 403: tcL('Acesso não autorizado.'),
+      404: tcL('Registro não encontrado.'), 409: tcL('Não foi possível salvar. Verifique os dados ou contate o suporte administrativo.'),
+      422: tcL('Verifique os campos informados, o domínio do e-mail e o formato da imagem.')};
     const failure = await response.json().catch(() => ({}));
-    throw new Error((typeof failure.detail === 'string' && response.status === 409 ? failure.detail : '') || messages[response.status] || 'Não foi possível concluir a operação.');
+    throw new Error((typeof failure.detail === 'string' && response.status === 409 ? failure.detail : '') || messages[response.status] || tcL('Não foi possível concluir a operação.'));
   }
   return blob ? response.blob() : response.json();
 }
@@ -1644,7 +1638,9 @@ async function companyRequest(path, method = 'GET', data, blob = false) {
 async function boot() {
   if (window.TAGCHECK_ACCESS?.resetFromLink()) return;
   syncHeaderLanguage();
-  openViewerButton.href = CONFIG.VIEWER_BASE_URL;
+  const viewerUrl = new URL(CONFIG.VIEWER_BASE_URL);
+  viewerUrl.searchParams.set('lang', state.language);
+  openViewerButton.href = viewerUrl.toString();
   if (openCampoButton) openCampoButton.href = CONFIG.CAMPO_BASE_URL || 'https://tagcheck-campo.onrender.com/';
 
   try {
@@ -1658,7 +1654,7 @@ async function boot() {
     if (state.authToken) {
       if (state.apiReachable === false) {
         const context = window.TAGCHECK_OFFLINE?.loadContext();
-        if (!context) throw new Error('Sessão offline indisponível ou expirada. Conecte-se e entre novamente.');
+        if (!context) throw new Error(tcL('Sessão offline indisponível ou expirada. Conecte-se e entre novamente.'));
         state.companyId = Number(context.company_id);
         state.companyName = context.company_name || '';
         state.userId = context.user_id == null ? null : Number(context.user_id);
@@ -1679,14 +1675,14 @@ async function boot() {
       await loadUnits();
       await loadCategories();
       await loadItems();
-      renderApp(state.apiReachable === false ? '<div class="notice">Modo offline ativo. Cadastros ficam isolados na empresa selecionada e serão sincronizados quando a conexão voltar.</div>' : '');
+      renderApp(state.apiReachable === false ? tcH('<div class="notice">Modo offline ativo. Cadastros ficam isolados na empresa selecionada e serão sincronizados quando a conexão voltar.</div>') : '');
     } else {
       renderLogin();
     }
   } catch (error) {
     if (state.pendingPassword) {
       renderPasswordChange();
-      document.getElementById('passwordFeedback').textContent = 'Não foi possível validar a sessão. Verifique sua conexão ou entre novamente.';
+      document.getElementById('passwordFeedback').textContent = tcL('Não foi possível validar a sessão. Verifique sua conexão ou entre novamente.');
       return;
     }
     if (state.authToken && state.companyId) {
@@ -1695,19 +1691,19 @@ async function boot() {
         await loadUnits();
         await loadCategories();
         await loadItems();
-        renderApp('<div class="notice">Modo offline ativo. Os dados locais pertencem somente à empresa atual.</div>');
+        renderApp(tcH('<div class="notice">Modo offline ativo. Os dados locais pertencem somente à empresa atual.</div>'));
         return;
       } catch (_) {}
     }
     if (state.authToken) {
-      renderApp(`<div class="notice error">${escapeHtml(error.message || t('listError'))}</div>`);
+      renderApp(tcH`<div class="notice error">${escapeHtml(tcL(error.message) || t('listError'))}</div>`);
     } else {
-      renderLogin(`<div class="notice error">${escapeHtml(error.message || t('apiFail'))}</div>`);
+      renderLogin(tcH`<div class="notice error">${escapeHtml(tcL(error.message) || t('apiFail'))}</div>`);
     }
   }
 }
-document.getElementById('langPt').addEventListener('click', () => setLanguage('pt'));
-document.getElementById('langEn').addEventListener('click', () => setLanguage('en'));
+
+
 logoutButton.addEventListener('click', logoutAdmin);
 document.getElementById('companyAdminButton').addEventListener('click', () => {
   if (!state.authToken || state.role !== 'company_admin' || state.isSuperadmin) return;
@@ -1772,7 +1768,7 @@ async function openEquipmentPdf() {
     const response = await fetchWithTimeout(`${CONFIG.API_BASE_URL}/equipment/pdf-access`, {
       method: 'POST', headers: getAuthHeaders({ Accept: 'application/json' })
     });
-    if (!response.ok) throw new Error('Não foi possível gerar o PDF. Entre novamente e tente outra vez.');
+    if (!response.ok) throw new Error(tcL('Não foi possível gerar o PDF. Entre novamente e tente outra vez.'));
     const result = await response.json();
     const form = document.createElement('form');
     form.method = 'POST';
@@ -1789,7 +1785,7 @@ async function openEquipmentPdf() {
   } catch (error) {
     tab.close();
     const feedback = document.getElementById('searchFeedback');
-    if (feedback) feedback.textContent = error.message;
+    if (feedback) feedback.textContent = tcL(error.message);
   }
 }
 
@@ -1799,12 +1795,12 @@ async function openConsolidatedReportPdf() {
       method: 'POST', headers: getAuthHeaders({'Content-Type': 'application/json', Accept: 'application/pdf'}),
       body: JSON.stringify({category_id: state.selectedCategoryId ? Number(state.selectedCategoryId) : null, unit_id: state.selectedUnitId ? Number(state.selectedUnitId) : null, search: document.getElementById('searchTagInput')?.value || null})
     });
-    if (!response.ok) throw new Error('Não foi possível gerar o relatório.');
+    if (!response.ok) throw new Error(tcL('Não foi possível gerar o relatório.'));
     const blob = await response.blob();
     const url = URL.createObjectURL(blob); window.open(url, '_blank', 'noopener');
     setTimeout(() => URL.revokeObjectURL(url), 60000);
   } catch (error) {
-    const feedback = document.getElementById('searchFeedback'); if (feedback) feedback.textContent = error.message;
+    const feedback = document.getElementById('searchFeedback'); if (feedback) feedback.textContent = tcL(error.message);
   }
 }
 
