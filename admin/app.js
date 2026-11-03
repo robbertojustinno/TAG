@@ -300,6 +300,7 @@ function syncHeaderLanguage() {
   }
   logoutButton.textContent = t('logout');
   logoutButton.classList.toggle('hidden', !state.authToken);
+  document.getElementById('maintenanceButton').classList.toggle('hidden', !state.authToken || !state.companyId || !!state.pendingPassword);
   const company = document.getElementById('activeCompany');
   company.textContent = state.companyName ? `${t('company')}: ${state.companyName}` : '';
   company.classList.toggle('hidden', !state.authToken || !state.companyName);
