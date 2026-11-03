@@ -58,6 +58,7 @@ if __package__:
     from .admin_api import build_router
     from .company_api import build_company_router
     from .tagging_api import build_tagging_router
+    from .maintenance_api import build_maintenance_router, migrate_maintenance
     from .category_api import build_category_router
     from .billing_api import build_billing_router
     from .billing_production_api import build_production_billing_router
@@ -71,6 +72,7 @@ else:
     from admin_api import build_router
     from company_api import build_company_router
     from tagging_api import build_tagging_router
+    from maintenance_api import build_maintenance_router, migrate_maintenance
     from category_api import build_category_router
     from billing_api import build_billing_router
     from billing_production_api import build_production_billing_router
@@ -81,6 +83,8 @@ engine = make_engine(DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 try:
     MIGRATION = migrate(engine, ADMIN_USERNAME, ADMIN_PASSWORD, ADMIN_EMAIL)
+    with engine.begin() as connection:
+        migrate_maintenance(connection)
 except Exception as migration_error:
     import logging
     import re
@@ -146,6 +150,7 @@ app = FastAPI()
 app.include_router(build_router(auth))
 app.include_router(build_company_router(auth))
 app.include_router(build_category_router(auth))
+app.include_router(build_maintenance_router(auth))
 app.include_router(build_tagging_router(auth))
 app.include_router(build_customer_router(auth))
 app.include_router(build_billing_router(auth))
