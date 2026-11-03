@@ -1,5 +1,7 @@
-const CACHE_NAME = 'tagcheck-admin-i18n-20261102';
+const CACHE_NAME = 'tagcheck-admin-maintenance-20261103';
 const APP_SHELL = [
+  "./maintenance.js?v=20261103",
+  "./maintenance.css?v=20261103",
   "./locale.js?v=20261102-i18n",
   "./theme.js?v=20261102-i18n",
   "./config.js?v=20260915-asset-categories",
