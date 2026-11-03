@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tagcheck-admin-maintenance-page-20261103';
+const CACHE_NAME = 'tagcheck-admin-header-20261103';
 const APP_SHELL = [
   "./manutencao/",
   "./maintenance.js?v=20261103-page",
@@ -16,7 +16,7 @@ const APP_SHELL = [
   "./offline-integration.js?v=20261102-i18n",
   './',
   './index.html',
-  './admin-layout.css?v=20261019-layout',
+  './admin-layout.css?v=20261103-header',
   './billing-production.js?v=20261023-extra',
   './config.js',
   './company-admin.js',
