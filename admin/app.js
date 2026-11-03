@@ -982,6 +982,7 @@ function renderLogin(notice = '') {
 
 function renderApp(notice = '') {
   if (state.pendingPassword) return renderPasswordChange();
+  if (document.body.dataset.page === 'maintenance' && state.authToken && state.companyId && window.openMaintenance) return window.openMaintenance();
   const total = state.items.length;
   const withPhoto = state.items.filter((x) => !!x.photo).length;
   const noPhoto = total - withPhoto;
