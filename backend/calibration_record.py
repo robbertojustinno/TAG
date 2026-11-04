@@ -125,7 +125,7 @@ def master_pdf(item, company_name):
     buf.seek(0);return buf
 
 
-def master_html(item, company_name, unit_name=''):
+def master_html(item, company_name, unit_name='', language='pt'):
     """Fill the customer-supplied HTML without rebuilding its report layout."""
     import re
     from pathlib import Path
@@ -137,6 +137,13 @@ def master_html(item, company_name, unit_name=''):
     source = re.sub(r'<button class="secondary"[^>]*>.*?</button>', '', source, flags=re.S)
     source = re.sub(r'(<div class="hint">).*?(</div>)', r'\1Confira os dados preenchidos e use Salvar como PDF para imprimir este modelo.\2', source, flags=re.S)
     source = source.replace('<td>Comparação direta com padrão rastreável</td>', '<td id="procedure"></td>')
+    if __package__:
+        from .report_locale import translate_template, report_text
+    else:
+        from report_locale import translate_template, report_text
+    # Only the empty template is translated. Instrument names, notes and other
+    # company-owned values are inserted afterwards and remain exactly as stored.
+    source = translate_template(source, language)
     def text(value):
         return escape(str(value if value is not None else ''), quote=True)
     def fill(field, value):
@@ -146,7 +153,7 @@ def master_html(item, company_name, unit_name=''):
     def date(value):
         from datetime import date as Date
         try:
-            return Date.fromisoformat(str(value)).strftime('%d/%m/%Y')
+            return Date.fromisoformat(str(value)).strftime('%m/%d/%Y' if language == 'en' else '%d/%m/%Y')
         except ValueError:
             return str(value or '')
     mapping = {
@@ -177,7 +184,7 @@ def master_html(item, company_name, unit_name=''):
     if not record.get('results'):
         missing.append('Leituras não informadas')
     if not mapping['gaps']:
-        mapping['gaps']='\n'.join(missing)
+        mapping['gaps']='\n'.join(report_text(value, language) for value in missing)
     for field,value in mapping.items():
         fill(field,value)
     rows=[]
