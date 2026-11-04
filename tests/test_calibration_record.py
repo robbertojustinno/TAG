@@ -31,6 +31,12 @@ class CalibrationTests(unittest.TestCase):
         self.assertIn('text/html',html.headers['content-type'])
         for value in ('id="page1"','id="page2"','1990/2026','5220/2026','Padrão utilizado'):
             self.assertIn(value,html.text)
+        for language, caption in [('en', 'Manufacturer'), ('es', 'Fabricante')]:
+            localized=self.client.get(f'/equipment/{item["id"]}/master-report-html?lang={language}',headers=self.headers)
+            self.assertEqual(localized.status_code,200)
+            self.assertIn('>'+caption+'<',localized.text)
+            self.assertIn('5220/2026',localized.text)
+        self.assertEqual(self.client.get(f'/equipment/{item["id"]}/master-report-html?lang=invalid',headers=self.headers).status_code,422)
         self.assertNotIn('pdfjsLib',html.text)
         self.assertNotIn('K = 2,77',html.text)
         self.assertNotIn('Aguardando leitura',html.text)
