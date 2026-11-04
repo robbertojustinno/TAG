@@ -56,7 +56,7 @@ window.openCalibration = function(prefix, selected = null, instrumentOptions = n
  loadInstrumentOptions();
  function tables() {
   const cell=(kind,row,i,k,label)=>{
-   const attrs=tcF`class="input" aria-label="${escapeHtml(label)} — linha ${i+1}" data-table="${kind}" data-row="${i}" data-key="${k}" title="${escapeHtml(CERT_TABLE_HELP[kind]?.[k] || label)}"`;
+   const attrs=tcF`class="input" aria-label="${escapeHtml(label)} — ${tcL('Linha')} ${i+1}" data-table="${kind}" data-row="${i}" data-key="${k}" title="${escapeHtml(CERT_TABLE_HELP[kind]?.[k] || label)}"`;
    if(kind === 'results' && ['input_unit','output_unit'].includes(k)) {
     const value=String(row[k] ?? '');
     const options=[...new Set([...METROLOGY_OPTIONS.measurement_unit, target.measurement_unit, ...((record.results || []).flatMap(point=>[point.input_unit,point.output_unit]))].filter(Boolean))];
@@ -111,7 +111,7 @@ window.openCalibration = function(prefix, selected = null, instrumentOptions = n
     await updateEquipment(selected.id,form);
     if(state.editingId === selected.id && state.editDraft) {Object.assign(state.editDraft,metrology,{calibration_record:record});}
     dialog.close();dialog.remove();await loadItems();renderApp(tcH('<div class="notice success">Certificado e leituras salvos no instrumento selecionado.</div>'));
-   } catch(error) {status.textContent=tcL('Falha ao salvar: ')+error.message;button.disabled=false;}
+   } catch(error) {status.textContent=tcL('Falha ao salvar: ')+tcL(error.message);button.disabled=false;}
   } else {
    target.calibration_record=record;Object.assign(target,metrology);
    dialog.close();dialog.remove();renderApp();
@@ -122,7 +122,7 @@ window.openCalibration = function(prefix, selected = null, instrumentOptions = n
 };
 window.downloadMasterReport = async function(id) {
  try {
- const response=await fetchWithTimeout(`${CONFIG.API_BASE_URL}/equipment/${id}/master-report-html`,{headers:getAuthHeaders()});
+ const response=await fetchWithTimeout(`${CONFIG.API_BASE_URL}/equipment/${id}/master-report-html?lang=${window.TAGCHECK_I18N.language}`, {headers:getAuthHeaders()});
  if(!response.ok)throw new Error(tcL('Não foi possível gerar o relatório mestre.'));
  const url=URL.createObjectURL(new Blob([await response.text()],{type:'text/html'}));const a=document.createElement('a');a.href=url;a.target='_blank';a.rel='noopener';a.click();setTimeout(()=>URL.revokeObjectURL(url),60000);
  }catch(e){alert(tcL(e.message));}

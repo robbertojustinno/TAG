@@ -1643,7 +1643,7 @@ async function boot() {
   const viewerUrl = new URL(CONFIG.VIEWER_BASE_URL);
   viewerUrl.searchParams.set('lang', state.language);
   openViewerButton.href = viewerUrl.toString();
-  if (openCampoButton) openCampoButton.href = CONFIG.CAMPO_BASE_URL || 'https://tagcheck-campo.onrender.com/';
+  if (openCampoButton) openCampoButton.href = window.TAGCHECK_I18N.url(CONFIG.CAMPO_BASE_URL || 'https://tagcheck-campo.onrender.com/');
 
   try {
     if (state.pendingPassword) {
@@ -1721,7 +1721,7 @@ document.getElementById('superadminButton').addEventListener('click', () => {
 openCampoButton?.addEventListener('click', event => {
   event.preventDefault();
   if (!state.authToken || !state.companyId) return;
-  const campoUrl = CONFIG.CAMPO_BASE_URL || 'https://tagcheck-campo.onrender.com/';
+  const campoUrl = window.TAGCHECK_I18N.url(CONFIG.CAMPO_BASE_URL || 'https://tagcheck-campo.onrender.com/');
   const targetOrigin = new URL(campoUrl).origin;
   const popup = window.open(campoUrl, 'tagcheck_campo_offline');
   if (!popup) return;
