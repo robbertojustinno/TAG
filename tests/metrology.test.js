@@ -4,7 +4,9 @@ const assert = require('node:assert/strict');
 const code = fs.readFileSync('admin/app.js', 'utf8').split('const CONFIG =')[0];
 const elements = {};
 const state = {createForm: {}, editDraft: {}};
-const sandbox = {state, document: {getElementById: id => elements[id]}, escapeHtml: value => String(value).replaceAll('<','&lt;')};
+// The metrology unit fixture uses the Portuguese UI runtime contract.
+const html = (parts,...values) => typeof parts === 'string' ? parts : parts.reduce((out,part,i)=>out+part+(values[i]??''),'');
+const sandbox = {tcL: value=>value, tcH:html, tcF:html, state, document: {getElementById: id => elements[id]}, escapeHtml: value => String(value).replaceAll('<','&lt;')};
 vm.createContext(sandbox);
 vm.runInContext(code, sandbox);
 for (const prefix of ['create','edit']) {
