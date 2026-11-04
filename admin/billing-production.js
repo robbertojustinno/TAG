@@ -8,7 +8,7 @@ window.TAGCHECK_BILLING = {
     const types = {UNDEFINED:tcL('Cliente escolhe na fatura'),BOLETO:tcL('Boleto'),PIX:tcL('Pix'),CREDIT_CARD:tcL('Cartão')};
     const money = value => new Intl.NumberFormat(window.TAGCHECK_I18N.locale,{style:'currency',currency:'BRL'}).format(Number(value||0));
     const paymentStatus = {EMISSION_PENDING:tcL('Emissão não confirmada'),RECEIVED:tcL('Recebido'),CONFIRMED:tcL('Confirmado'),PENDING:tcL('Pendente'),OVERDUE:tcL('Vencido'),REFUNDED:tcL('Estornado'),RECEIVED_IN_CASH:tcL('Recebido em dinheiro')};
-    const dateLabel = value => /^\d{4}-\d{2}-\d{2}$/.test(value||'') ? value.split('-').reverse().join('/') : value||'—';
+    const dateLabel = value => /^\d{4}-\d{2}-\d{2}$/.test(value||'') ? window.TAGCHECK_I18N.formatDate(value) : value||'—';
     host.classList.add('billing-workspace');
     host.innerHTML = tcH`<div class="billing-heading"><div><p class="section-kicker">GESTÃO FINANCEIRA</p><h3>Pagamentos</h3><p class="subtle">Planos, assinaturas e faturas por empresa.</p></div><span class="status-pill billing-test-badge">Pagamentos reais</span></div>
       <div class="billing-connections"><span class="status-pill ${status.api_configured?'status-ok':'status-danger'}">${status.api_configured?tcL('Chave configurada'):tcL('API não configurada')}</span><span class="status-pill ${status.webhook_configured?'status-ok':'status-danger'}">${status.webhook_configured?tcL('Confirmações configuradas'):tcL('Confirmações pendentes')}</span></div>
