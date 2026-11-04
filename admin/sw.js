@@ -1,8 +1,8 @@
-const CACHE_NAME = 'tagcheck-admin-header-20261103';
+const CACHE_NAME = 'tagcheck-admin-upload-20261104';
 const APP_SHELL = [
   "./manutencao/",
-  "./maintenance.js?v=20261103-page",
-  "./maintenance.css?v=20261103-page",
+  "./maintenance.js?v=20261104-upload",
+  "./maintenance.css?v=20261104-upload",
   "./locale.js?v=20261102-i18n",
   "./theme.js?v=20261102-i18n",
   "./config.js?v=20260915-asset-categories",

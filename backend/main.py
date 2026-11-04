@@ -58,6 +58,7 @@ if __package__:
     from .admin_api import build_router
     from .company_api import build_company_router
     from .tagging_api import build_tagging_router
+    from .maintenance_upload import build_maintenance_upload_router
     from .maintenance_import import import_maintenance_from_environment
     from .maintenance_api import build_maintenance_router, migrate_maintenance
     from .category_api import build_category_router
@@ -73,6 +74,7 @@ else:
     from admin_api import build_router
     from company_api import build_company_router
     from tagging_api import build_tagging_router
+    from maintenance_upload import build_maintenance_upload_router
     from maintenance_import import import_maintenance_from_environment
     from maintenance_api import build_maintenance_router, migrate_maintenance
     from category_api import build_category_router
@@ -154,6 +156,7 @@ app.include_router(build_router(auth))
 app.include_router(build_company_router(auth))
 app.include_router(build_category_router(auth))
 app.include_router(build_maintenance_router(auth))
+app.include_router(build_maintenance_upload_router(auth))
 app.include_router(build_tagging_router(auth))
 app.include_router(build_customer_router(auth))
 app.include_router(build_billing_router(auth))

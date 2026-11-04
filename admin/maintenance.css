@@ -12,3 +12,5 @@ section.maintenance-page{width:100%;max-width:none;max-height:none;display:block
 .mp-form-panel{scroll-margin-top:240px}
 html[data-theme=dark] .mp-plan-link{color:#8dc9ff}
 html[data-theme=dark] .mp-sheet-grid input[readonly]{background:#243f53;color:#d3e3ee}
+
+.mp-import-result{margin-top:20px;white-space:pre-line}.mp-import-summary{display:flex;flex-wrap:wrap;gap:12px;margin:18px 0}.mp-import-summary span{padding:12px;border:1px solid #aabfce;border-radius:8px}.mp-import-summary strong{font-size:20px}#mpUploadForm input[type=file]{margin:10px 0}.mp-import-result table{min-width:700px}
