@@ -912,12 +912,12 @@ def instrument_master_report(id: int, _auth: CompanyContext = Depends(auth.curre
 
 
 @app.get("/equipment/{id}/master-report-html", response_class=HTMLResponse)
-def instrument_master_report_html(id: int, _auth: CompanyContext = Depends(auth.current)):
+def instrument_master_report_html(id: int, lang: str = Query('pt', pattern='^(pt|en|es)$'), _auth: CompanyContext = Depends(auth.current)):
     with SessionLocal() as db:
         item = equipment_query(db, _auth).filter(Equipment.id == id).first()
         if not item:
             raise HTTPException(404, 'Instrumento não encontrado')
         company = db.get(Company, item.company_id)
         unit = db.get(Unit, item.unit_id) if item.unit_id else None
-        return HTMLResponse(master_html(item, company.name, unit.name if unit else ''),
+        return HTMLResponse(master_html(item, company.name, unit.name if unit else '', lang),
             headers={'Cache-Control':'no-store', 'X-Content-Type-Options':'nosniff'})
