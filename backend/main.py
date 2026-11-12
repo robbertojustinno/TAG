@@ -60,7 +60,7 @@ if __package__:
     from .tagging_api import build_tagging_router
     from .maintenance_upload import build_maintenance_upload_router
     from .maintenance_import import import_maintenance_from_environment
-    from .maintenance_api import build_maintenance_router, migrate_maintenance
+    from .maintenance_api import MaintenancePlan, build_maintenance_router, migrate_maintenance
     from .category_api import build_category_router
     from .billing_api import build_billing_router
     from .billing_production_api import build_production_billing_router
@@ -76,7 +76,7 @@ else:
     from tagging_api import build_tagging_router
     from maintenance_upload import build_maintenance_upload_router
     from maintenance_import import import_maintenance_from_environment
-    from maintenance_api import build_maintenance_router, migrate_maintenance
+    from maintenance_api import MaintenancePlan, build_maintenance_router, migrate_maintenance
     from category_api import build_category_router
     from billing_api import build_billing_router
     from billing_production_api import build_production_billing_router
@@ -563,7 +563,14 @@ def delete_equipment(
     try:
         item = equipment_query(db, _auth).filter(Equipment.id == id).first()
         if not item:
-            raise HTTPException(status_code=404, detail="Equipamento nÃ£o encontrado.")
+            raise HTTPException(status_code=404, detail="Equipamento não encontrado.")
+
+        linked_plan = db.query(MaintenancePlan.id).filter(
+            MaintenancePlan.equipment_id == item.id,
+            MaintenancePlan.company_id == item.company_id,
+        ).first()
+        if linked_plan:
+            raise HTTPException(status_code=409, detail={"code": "equipment_has_maintenance_plan"})
 
         db.delete(item)
         db.commit()

@@ -1,9 +1,9 @@
-const CACHE_NAME = 'tagcheck-admin-complete-i18n-20261104';
+const CACHE_NAME = 'tagcheck-admin-20261112-equipment-feedback';
 const APP_SHELL = [
   "./manutencao/",
   "./maintenance.js?v=20261104-complete",
   "./maintenance.css?v=20261104-upload",
-  "./locale.js?v=20261104-complete",
+  "./locale.js?v=20261112-equipment-status",
   "./theme.js?v=20261102-i18n",
   "./config.js?v=20260915-asset-categories",
   "./company-admin.js?v=20261104-complete",
@@ -12,7 +12,7 @@ const APP_SHELL = [
   "./offline-store.js?v=20261006-storage-fallback",
   "./calibration.js?v=20261104-complete",
   "./customer-access.js?v=20261104-complete",
-  "./app.js?v=20261104-complete",
+  "./app.js?v=20261112-equipment-feedback",
   "./offline-integration.js?v=20261104-complete",
   './',
   './index.html',

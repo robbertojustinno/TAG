@@ -77,7 +77,19 @@ class MaintenanceAuthenticationTests(unittest.TestCase):
             result=client.post('/maintenance/plans',headers=headers,json={'code':'M-'+secrets.token_hex(4),'equipment_id':id,'activity':'Inspeção','responsible':'Equipe','interval_days':7})
             self.assertEqual(result.status_code,201,result.text)
             self.assertEqual(result.headers.get('cache-control'),'no-store')
-            self.assertEqual(client.delete(f'/equipment/{id}',headers=headers).status_code,409)
-            self.assertEqual(client.get('/maintenance/plans',headers=headers).status_code,200)
+            blocked = client.delete(f'/equipment/{id}', headers=headers)
+            self.assertEqual(blocked.status_code, 409)
+            self.assertEqual(blocked.json()['detail']['code'], 'equipment_has_maintenance_plan')
+            self.assertEqual(client.get('/maintenance/plans', headers=headers).status_code, 200)
+            with b.SessionLocal() as db:
+                self.assertIsNotNone(db.get(b.Equipment, id))
+                unlinked = b.Equipment(company_id=b.DEFAULT_COMPANY_ID, tag='FREE-'+secrets.token_hex(4),
+                                       name='Instrumento sem plano', photo='test-only')
+                db.add(unlinked)
+                db.commit()
+                unlinked_id = unlinked.id
+            self.assertEqual(client.delete(f'/equipment/{unlinked_id}', headers=headers).status_code, 200)
+            with b.SessionLocal() as db:
+                self.assertIsNone(db.get(b.Equipment, unlinked_id))
 
 if __name__=='__main__':unittest.main()

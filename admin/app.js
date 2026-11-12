@@ -741,17 +741,24 @@ async function updateEquipment(id, formData) {
 }
 
 async function deleteEquipment(id) {
-  const response = await fetchWithTimeout(`${CONFIG.API_BASE_URL}/equipment/${id}`, {
+  const response = await fetchWithTimeout(buildUrl(CONFIG.API_BASE_URL, `/equipment/${id}`), {
     method: 'DELETE',
-    headers: getAuthHeaders()
+    headers: getAuthHeaders({ Accept: 'application/json' })
   });
 
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(text || t('deleteError'));
-  }
+  if (response.ok) return;
 
-  return await response.json().catch(() => ({ ok: true }));
+  const error = await response.json().catch(() => null);
+  if (response.status === 409) {
+    if (error?.detail?.code === 'equipment_has_maintenance_plan') {
+      throw new Error(tcL('Este equipamento está vinculado a um plano de manutenção. Para retirá-lo de uso, edite o equipamento e selecione Inativo no campo Status.'));
+    }
+    throw new Error(tcL('A exclusão foi bloqueada por um conflito com outro registro.'));
+  }
+  if (response.status === 401) throw new Error(tcL('Sua sessão expirou. Entre novamente para excluir o equipamento.'));
+  if (response.status === 403) throw new Error(tcL('Seu perfil não tem permissão para excluir este equipamento.'));
+  if (response.status === 404) throw new Error(tcL('Equipamento não encontrado. Atualize a lista antes de tentar novamente.'));
+  throw new Error(t('deleteError'));
 }
 
 function viewerUrlForTag(tag) {
@@ -785,7 +792,9 @@ function qrHtml(tag) {
 }
 
 function statusPill(status) {
-  return tcH`<span class="status-pill status-ok">${escapeHtml(status || t('active'))}</span>`;
+  const value = status || 'Ativo';
+  const appearance = value === 'Ativo' ? 'status-ok' : 'status-neutral';
+  return tcH`<span class="status-pill ${appearance}">${escapeHtml(tcL(value))}</span>`;
 }
 
 function photoHtml(item) {
@@ -836,7 +845,7 @@ function createAdditionalFields(prefix, values) {
       <input id="${prefix}SerialInput" class="input" placeholder="${t('serialNumber')}" value="${escapeHtml(values.serial_number || '')}" />
       <input id="${prefix}CalibrationDateInput" class="input" type="${calibrationType}" placeholder="${t('calibrationDate')}" value="${escapeHtml(values.calibration_date || '')}" />
       <input id="${prefix}NextCalibrationDateInput" class="input" type="${nextCalibrationType}" placeholder="${t('nextCalibrationDate')}" value="${escapeHtml(values.next_calibration_date || '')}" />
-      <input id="${prefix}StatusInput" class="input" placeholder="${t('chooseStatus')}" value="${escapeHtml(values.status || 'Ativo')}" />
+      ${prefix === 'create' ? `<input id="createStatusInput" class="input" placeholder="${t('chooseStatus')}" value="${escapeHtml(values.status || 'Ativo')}" />` : ''}
       <label>Categoria<select id="${prefix}CategoryInput" class="input"><option value="">Sem categoria</option>${categoryOptions(values.category_id || '')}</select></label>
       <input id="${prefix}NotesInput" class="input" placeholder="${t('notes')}" value="${escapeHtml(values.notes || '')}" />
     </div>
@@ -865,6 +874,9 @@ function renderEditableRow(item) {
     previewUrl: item.photo || ''
   };
 
+  const currentStatus = draft.status || 'Ativo';
+  const statusOptions = [...new Set(['Ativo', 'Inativo', currentStatus])];
+
   return tcH`
     <tr class="edit-row">
       <td class="code-soft">${escapeHtml(item.id)}</td>
@@ -874,6 +886,12 @@ function renderEditableRow(item) {
             <input id="editTagInput" class="input table-input" value="${escapeHtml(draft.tag)}" placeholder="${t('tag')}" />
             <input id="editNameInput" class="input table-input" value="${escapeHtml(draft.name)}" placeholder="${t('name')}" />
           </div>
+
+          <label for="editStatusInput">${t('chooseStatus')}
+            <select id="editStatusInput" class="input">
+              ${statusOptions.map(status => `<option value="${escapeHtml(status)}" ${status === currentStatus ? 'selected' : ''}>${escapeHtml(tcL(status))}</option>`).join('')}
+            </select>
+          </label>
 
           ${createAdditionalFields('edit', draft)}
 
@@ -888,6 +906,7 @@ function renderEditableRow(item) {
             <button class="primary-button" id="saveEditButton">${t('save')}</button>
             <button class="outline-button" id="cancelEditButton">${t('cancel')}</button>
           </div>
+          <div id="editFeedback" role="alert" tabindex="-1" hidden></div>
         </div>
       </td>
     </tr>
@@ -947,9 +966,10 @@ function renderDeleteConfirm() {
         <strong>${escapeHtml(item.tag)} • ${escapeHtml(item.name)}</strong>
       </div>
       <div class="inline-actions">
-        <button class="danger-button" id="confirmDeleteButton">${t('delete')}</button>
-        <button class="outline-button" id="cancelDeleteButton">${t('cancel')}</button>
+        <button type="button" class="danger-button" id="confirmDeleteButton">${t('delete')}</button>
+        <button type="button" class="outline-button" id="cancelDeleteButton">${t('cancel')}</button>
       </div>
+      <div id="deleteFeedback" role="alert" tabindex="-1" hidden></div>
     </div>
   `;
 }
@@ -980,7 +1000,7 @@ function renderLogin(notice = '') {
   bindLoginEvents();
 }
 
-function renderApp(notice = '') {
+function renderApp(notice = '', equipmentNotice = '') {
   if (state.pendingPassword) return renderPasswordChange();
   if (document.body.dataset.page === 'maintenance' && state.authToken && state.companyId && window.openMaintenance) return window.openMaintenance();
   const total = state.items.length;
@@ -1033,7 +1053,7 @@ function renderApp(notice = '') {
           <div class="inline-actions">
             <button id="createButton" class="primary-button">${t('create')}</button>
           </div>
-          <div id="createFeedback">${notice}</div>
+          <div id="createFeedback" role="status">${notice}</div>
         </div>` : ''}
 
         <div class="search-category-stack"><div class="card panel">
@@ -1077,6 +1097,7 @@ function renderApp(notice = '') {
   <h3>${t('listTitle')}</h3>
   <div class="inline-actions"><button id="reportPdfButton" class="primary-button" type="button">GERAR PDF</button><button id="pdfButton" class="outline-button" type="button">Gerar PDF QR</button></div>
 </div>
+        <div id="equipmentActionFeedback" role="status" tabindex="-1" ${equipmentNotice ? '' : 'hidden'}>${equipmentNotice}</div>
         <div class="table-wrap">
           <table>
             <thead>
@@ -1103,6 +1124,19 @@ function renderApp(notice = '') {
 
   bindEvents();
   renderQRCodes();
+}
+
+async function showEquipmentResult(message, tag, token) {
+  let refreshWarning = '';
+  try {
+    await loadItems();
+  } catch (_) {
+    refreshWarning = tcH`<div class="notice error">${t('listError')}</div>`;
+  }
+  if (state.authToken !== token) return;
+
+  renderApp('', tcH`<div class="notice success">${t(message)} <strong>${escapeHtml(tag)}</strong></div>${refreshWarning}`);
+  document.getElementById('equipmentActionFeedback')?.focus();
 }
 
 function updateCreateFormState() {
@@ -1285,7 +1319,9 @@ function bindEvents() {
     renderApp();
   });
 
-  document.getElementById('createButton')?.addEventListener('click', async () => {
+  document.getElementById('createButton')?.addEventListener('click', async event => {
+    const button = event.currentTarget;
+    if (button.disabled) return;
     updateCreateFormState();
 
     const tag = state.createForm.tag;
@@ -1316,16 +1352,20 @@ function bindEvents() {
     formData.append('notes', state.createForm.notes);
     formData.append('category_id', state.createForm.category_id || '');
 
+    const token = state.authToken;
+    button.disabled = true;
     feedback.innerHTML = tcH`<div class="notice">${t('creating')}</div>`;
 
     try {
       await createEquipment(formData);
-      resetCreateForm();
-      await loadItems();
-      renderApp(tcH`<div class="notice success">${t('createSuccess')}</div>`);
     } catch (error) {
       feedback.innerHTML = tcH`<div class="notice error">${escapeHtml(tcL(error.message) || t('createError'))}</div>`;
+      button.disabled = false;
+      return;
     }
+    if (state.authToken !== token) return;
+    resetCreateForm();
+    await showEquipmentResult('createSuccess', tag, token);
   });
 
   document.getElementById('searchButton')?.addEventListener('click', async () => {
@@ -1441,8 +1481,14 @@ function bindEvents() {
     });
   });
 
-  document.getElementById('saveEditButton')?.addEventListener('click', async () => {
-    if (!state.editingId || !state.editDraft) return;
+  document.getElementById('saveEditButton')?.addEventListener('click', async event => {
+    const button = event.currentTarget;
+    if (button.disabled || !state.editingId || !state.editDraft) return;
+
+    const id = state.editingId;
+    const token = state.authToken;
+    const cancel = document.getElementById('cancelEditButton');
+    const feedback = document.getElementById('editFeedback');
 
     const form = new FormData();
     form.append('tag', state.editDraft.tag || '');
@@ -1465,15 +1511,26 @@ function bindEvents() {
       form.append('photo', state.editDraft.photoFile);
     }
 
+    button.disabled = true;
+    cancel.disabled = true;
+    feedback.hidden = true;
     try {
-      await updateEquipment(state.editingId, form);
-      state.editingId = null;
-      state.editDraft = null;
-      await loadItems();
-      renderApp(tcH`<div class="notice success">${t('updateSuccess')}</div>`);
+      await updateEquipment(id, form);
     } catch (error) {
-      renderApp(tcH`<div class="notice error">${escapeHtml(tcL(error.message) || t('updateError'))}</div>`);
+      if (state.authToken === token && feedback.isConnected) {
+        feedback.className = 'notice error';
+        feedback.textContent = tcL(error.message) || t('updateError');
+        feedback.hidden = false;
+        feedback.focus();
+        button.disabled = false;
+        cancel.disabled = false;
+      }
+      return;
     }
+    if (state.authToken !== token) return;
+    state.editingId = null;
+    state.editDraft = null;
+    await showEquipmentResult('updateSuccess', form.get('tag'), token);
   });
 
   document.getElementById('cancelEditButton')?.addEventListener('click', () => {
@@ -1482,17 +1539,36 @@ function bindEvents() {
     renderApp();
   });
 
-  document.getElementById('confirmDeleteButton')?.addEventListener('click', async () => {
-    if (!state.deleteTargetId) return;
+  document.getElementById('confirmDeleteButton')?.addEventListener('click', async event => {
+    const targetId = state.deleteTargetId;
+    const confirmButton = event.currentTarget;
+    if (!targetId || confirmButton.disabled) return;
 
+    const cancelButton = document.getElementById('cancelDeleteButton');
+    const feedback = document.getElementById('deleteFeedback');
+    const tag = getItemById(targetId)?.tag || '';
+    const token = state.authToken;
+    confirmButton.disabled = true;
+    cancelButton.disabled = true;
+    feedback.hidden = true;
     try {
-      await deleteEquipment(state.deleteTargetId);
-      state.deleteTargetId = null;
-      await loadItems();
-      renderApp(tcH`<div class="notice success">${t('deleteSuccess')}</div>`);
+      await deleteEquipment(targetId);
     } catch (error) {
-      renderApp(tcH`<div class="notice error">${escapeHtml(tcL(error.message) || t('deleteError'))}</div>`);
+      if (state.authToken === token && feedback.isConnected) {
+        feedback.className = 'notice error';
+        feedback.textContent = tcL(error.message) || t('deleteError');
+        feedback.hidden = false;
+        feedback.focus();
+        confirmButton.disabled = false;
+        cancelButton.disabled = false;
+      }
+      return;
     }
+
+    if (state.authToken !== token) return;
+    state.items = state.items.filter(item => item.id !== targetId);
+    state.deleteTargetId = null;
+    await showEquipmentResult('deleteSuccess', tag, token);
   });
 
   document.getElementById('cancelDeleteButton')?.addEventListener('click', () => {

@@ -38,7 +38,7 @@ test('Navigation retains selected language even with blocked local storage',()=>
 test('Admin and Viewer use the same catalogs and updated language resources',()=>{
  assert.equal(fs.readFileSync(path.join(root,'admin/locale.js'),'utf8'),fs.readFileSync(path.join(root,'viewer/locale.js'),'utf8'));
  for(const f of ['admin/index.html','admin/manutencao/index.html','admin/tagueamento/index.html','viewer/index.html']){
-  const html=fs.readFileSync(path.join(root,f),'utf8');assert.match(html,/locale.js\?v=20261104-complete/);
+  const html=fs.readFileSync(path.join(root,f),'utf8');assert.match(html,/locale\.js\?v=(?:20261104-complete|20261112-equipment-status)"/);
   assert.ok(html.indexOf('locale.js')<html.indexOf('app.js'));
  }
 });
