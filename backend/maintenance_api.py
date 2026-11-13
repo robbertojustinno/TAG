@@ -97,16 +97,23 @@ def build_maintenance_router(auth):
         row=db.scalar(select(MaintenancePlan).where(MaintenancePlan.id==id, MaintenancePlan.company_id==ctx.company_id))
         if row is None: raise HTTPException(404, 'Plano não encontrado.')
         return row
-    def asset(db, id, ctx):
-        row=db.scalar(select(Equipment).where(Equipment.id==id, Equipment.company_id==ctx.company_id))
+    def asset(db, id, ctx, *, for_write=False):
+        query = select(Equipment).where(Equipment.id == id, Equipment.company_id == ctx.company_id)
+        if for_write:
+            query = query.with_for_update()
+        row = db.scalar(query)
         if row is None: raise HTTPException(404, 'Equipamento não encontrado nesta empresa.')
+        if for_write and row.archived:
+            raise HTTPException(409, 'Equipamento arquivado. O plano está disponível para consulta.')
         return row
     def output(db, row, ctx):
         data=json.loads(row.data); eq=asset(db, data['equipment_id'], ctx)
+        if eq.archived:
+            data['active'] = False
         due=(date.fromisoformat(data['last_execution'])+timedelta(days=data['interval_days'])) if data.get('last_execution') else (date.fromisoformat(data['first_due']) if data.get('first_due') else None)
         remaining=(due-datetime.now(ZoneInfo('America/Sao_Paulo')).date()).days if due else None
         status='Inativo' if not data['active'] else 'Sem programação' if due is None else 'Atrasada' if remaining<0 else 'Vence hoje' if remaining==0 else 'Próximos 7 dias' if remaining<=7 else 'Programada'
-        return dict(data,id=row.id,revision=row.revision,tag=eq.tag,equipment_name=data.get('equipment_label') or eq.name,next_due=due,days_remaining=remaining,status=status,updated_at=row.updated_at)
+        return dict(data,equipment_archived=eq.archived,id=row.id,revision=row.revision,tag=eq.tag,equipment_name=data.get('equipment_label') or eq.name,next_due=due,days_remaining=remaining,status=status,updated_at=row.updated_at)
     def save(db, row):
         try: db.commit()
         except IntegrityError:
@@ -115,7 +122,7 @@ def build_maintenance_router(auth):
     @router.get('/equipment')
     def equipment(ctx=Depends(auth.current)):
         with auth.sessions() as db:
-            return [dict(id=e.id,tag=e.tag,name=e.name,workshop=e.sector or '',location=e.location or '',equipment_type=e.equipment_type or '') for e in db.scalars(select(Equipment).where(Equipment.company_id==ctx.company_id).order_by(Equipment.tag))]
+            return [dict(id=e.id,tag=e.tag,name=e.name,workshop=e.sector or '',location=e.location or '',equipment_type=e.equipment_type or '') for e in db.scalars(select(Equipment).where(Equipment.company_id==ctx.company_id, Equipment.archived.is_(False)).order_by(Equipment.tag))]
 
     @router.get('/plans')
     def plans(ctx=Depends(auth.current)):
@@ -126,7 +133,7 @@ def build_maintenance_router(auth):
     def create(payload: PlanInput, ctx=Depends(auth.current)):
         permission(ctx, ['company_admin','supervisor'])
         with auth.sessions() as db:
-            asset(db,payload.equipment_id,ctx)
+            asset(db,payload.equipment_id,ctx,for_write=True)
             row=MaintenancePlan(company_id=ctx.company_id,equipment_id=payload.equipment_id,code=payload.code,data=payload.model_dump_json(),updated_by=ctx.user_id)
             db.add(row);save(db,row);db.refresh(row);return output(db,row,ctx)
 
@@ -134,7 +141,7 @@ def build_maintenance_router(auth):
     def edit(id: int, payload: PlanUpdate, ctx=Depends(auth.current)):
         permission(ctx, ['company_admin','supervisor'])
         with auth.sessions() as db:
-            row=find(db,id,ctx);asset(db,payload.equipment_id,ctx)
+            row=find(db,id,ctx);asset(db,payload.equipment_id,ctx,for_write=True)
             if json.loads(row.data).get('last_execution') != (payload.last_execution.isoformat() if payload.last_execution else None) and db.scalar(select(MaintenanceExecution.id).where(MaintenanceExecution.plan_id==id)):
                 raise HTTPException(409,'Última execução possui histórico; registre uma nova execução para atualizá-la.')
             if row.equipment_id != payload.equipment_id:
@@ -154,6 +161,7 @@ def build_maintenance_router(auth):
         permission(ctx,['company_admin','supervisor','operator'])
         with auth.sessions() as db:
             row=find(db,id,ctx);data=json.loads(row.data)
+            asset(db,row.equipment_id,ctx,for_write=True)
             if not data['active']: raise HTTPException(409,'Plano inativo.')
             completed=payload.finished_at.astimezone(ZoneInfo('America/Sao_Paulo')).date()
             if data.get('last_execution') and completed<date.fromisoformat(data['last_execution']):

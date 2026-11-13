@@ -122,6 +122,8 @@ const I18N = {
     deleteConfirmTitle: 'Confirmar exclusão',
     deleteConfirmText: 'Deseja excluir este equipamento?',
     deleteSuccess: 'Equipamento excluído com sucesso.',
+    archiveSuccess: 'Equipamento arquivado. O histórico foi preservado.',
+    deleteArchiveNotice: 'Se houver registros vinculados, o equipamento será arquivado e sairá da lista.',
     deleteError: 'Falha ao excluir equipamento.',
     preview: 'Pré-visualização',
     selectedPhoto: 'Foto selecionada',
@@ -746,7 +748,7 @@ async function deleteEquipment(id) {
     headers: getAuthHeaders({ Accept: 'application/json' })
   });
 
-  if (response.ok) return;
+  if (response.ok) return response.json().catch(() => ({}));
 
   const error = await response.json().catch(() => null);
   if (response.status === 409) {
@@ -965,6 +967,7 @@ function renderDeleteConfirm() {
         ${t('deleteConfirmText')}<br>
         <strong>${escapeHtml(item.tag)} • ${escapeHtml(item.name)}</strong>
       </div>
+      <p class="subtle">${t('deleteArchiveNotice')}</p>
       <div class="inline-actions">
         <button type="button" class="danger-button" id="confirmDeleteButton">${t('delete')}</button>
         <button type="button" class="outline-button" id="cancelDeleteButton">${t('cancel')}</button>
@@ -1551,8 +1554,9 @@ function bindEvents() {
     confirmButton.disabled = true;
     cancelButton.disabled = true;
     feedback.hidden = true;
+    let result;
     try {
-      await deleteEquipment(targetId);
+      result = await deleteEquipment(targetId);
     } catch (error) {
       if (state.authToken === token && feedback.isConnected) {
         feedback.className = 'notice error';
@@ -1568,7 +1572,7 @@ function bindEvents() {
     if (state.authToken !== token) return;
     state.items = state.items.filter(item => item.id !== targetId);
     state.deleteTargetId = null;
-    await showEquipmentResult('deleteSuccess', tag, token);
+    await showEquipmentResult(result.archived ? 'archiveSuccess' : 'deleteSuccess', tag, token);
   });
 
   document.getElementById('cancelDeleteButton')?.addEventListener('click', () => {

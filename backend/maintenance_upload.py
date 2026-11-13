@@ -113,6 +113,8 @@ def reconciliation(db,company_id,rows):
     items=[];state=[];new_tags=set();existing_tags=set()
     for row in rows:
         e=assets.get(row['tag']);p=plans.get(row['code'])
+        if e is not None and e.archived:
+            errors.append(f"Linha {row['sheet_row']}: equipamento arquivado.")
         values={k:v for k,v in row.items() if k not in ('tag','equipment_name','sheet_row')}
         values['equipment_label']=row['equipment_name']
         old=json.loads(p.data) if p else {}
@@ -154,6 +156,9 @@ def build_maintenance_upload_router(auth):
         try:
             with auth.sessions.begin() as db:
                 db.execute(select(Company.id).where(Company.id==ctx.company_id).with_for_update()).scalar_one()
+                tags = {row['tag'] for row in rows}
+                db.execute(select(Equipment.id).where(Equipment.company_id==ctx.company_id,
+                    func.upper(func.trim(Equipment.tag)).in_(tags)).order_by(Equipment.id).with_for_update()).all()
                 report=reconciliation(db,ctx.company_id,rows)
                 if report['errors'] or claims['state_hash']!=report['state_hash']: raise HTTPException(409,'Cadastros ou planos mudaram desde a prévia. Confira a planilha novamente.')
                 assets={e.tag.strip().upper():e for e in db.scalars(select(Equipment).where(Equipment.company_id==ctx.company_id))}

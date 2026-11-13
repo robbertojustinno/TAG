@@ -344,7 +344,7 @@ async def create_equipment(
     try:
         validate_equipment_unit(db, unit_id, _auth.company_id)
         validate_equipment_category(db, category_id, _auth.company_id)
-        existing = equipment_query(db, _auth).filter(Equipment.tag == tag).first()
+        existing = equipment_query(db, _auth, include_archived=True).filter(Equipment.tag == tag).first()
         if existing:
             raise HTTPException(status_code=400, detail="TAG jÃ¡ cadastrada.")
 
@@ -513,7 +513,7 @@ async def update_equipment(
             item.category_id = category_id
 
         tag = tag.strip().upper()
-        duplicated = equipment_query(db, _auth).filter(
+        duplicated = equipment_query(db, _auth, include_archived=True).filter(
             Equipment.tag == tag,
             Equipment.id != id
         ).first()
@@ -561,20 +561,37 @@ def delete_equipment(
 ):
     db = SessionLocal()
     try:
-        item = equipment_query(db, _auth).filter(Equipment.id == id).first()
+        item = equipment_query(db, _auth, include_archived=True).filter(
+            Equipment.id == id
+        ).with_for_update().first()
         if not item:
             raise HTTPException(status_code=404, detail="Equipamento não encontrado.")
+        if item.archived:
+            return {"ok": True, "archived": True}
 
         linked_plan = db.query(MaintenancePlan.id).filter(
             MaintenancePlan.equipment_id == item.id,
             MaintenancePlan.company_id == item.company_id,
         ).first()
-        if linked_plan:
-            raise HTTPException(status_code=409, detail={"code": "equipment_has_maintenance_plan"})
-
-        db.delete(item)
+        archive = linked_plan is not None
+        if not archive:
+            try:
+                with db.begin_nested():
+                    db.delete(item)
+                    db.flush()
+            except IntegrityError as error:
+                # Preserve the asset when another table still references it.
+                is_foreign_key = getattr(error.orig, "pgcode", None) == "23503"
+                if db.bind.dialect.name == "sqlite":
+                    is_foreign_key = str(error.orig) == "FOREIGN KEY constraint failed"
+                if not is_foreign_key:
+                    raise
+                archive = True
+        if archive:
+            item.archived = True
+            item.status = "Inativo"
         db.commit()
-        return {"ok": True}
+        return {"ok": True, "archived": archive}
     except HTTPException:
         db.rollback()
         raise

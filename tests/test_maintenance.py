@@ -77,12 +77,31 @@ class MaintenanceAuthenticationTests(unittest.TestCase):
             result=client.post('/maintenance/plans',headers=headers,json={'code':'M-'+secrets.token_hex(4),'equipment_id':id,'activity':'Inspeção','responsible':'Equipe','interval_days':7})
             self.assertEqual(result.status_code,201,result.text)
             self.assertEqual(result.headers.get('cache-control'),'no-store')
-            blocked = client.delete(f'/equipment/{id}', headers=headers)
-            self.assertEqual(blocked.status_code, 409)
-            self.assertEqual(blocked.json()['detail']['code'], 'equipment_has_maintenance_plan')
-            self.assertEqual(client.get('/maintenance/plans', headers=headers).status_code, 200)
+            plan = result.json()
+            finished = datetime.now(timezone.utc) - timedelta(minutes=1)
+            execution = dict(revision=plan['revision'], work_order='OS-ARQUIVO',
+                             started_at=(finished-timedelta(minutes=10)).isoformat(),
+                             finished_at=finished.isoformat(), executor='Técnico',
+                             result='OK', conformity='Conforme', release='Liberado',
+                             released_by='Supervisor')
+            execution_url = f"/maintenance/plans/{plan['id']}/executions"
+            self.assertEqual(client.post(execution_url, json=execution, headers=headers).status_code, 201)
+            for _ in range(2):
+                archived = client.delete(f'/equipment/{id}', headers=headers)
+                self.assertEqual(archived.status_code, 200, archived.text)
+                self.assertTrue(archived.json()['archived'])
+            for path in ('/equipment', '/maintenance/equipment'):
+                items = client.get(path, headers=headers).json()
+                self.assertNotIn(id, [item['id'] for item in items])
+            self.assertEqual(client.get(f'/equipment/tag/{e.tag}', headers=headers).status_code, 404)
+            plans = client.get('/maintenance/plans', headers=headers).json()
+            stored = next(item for item in plans if item['id'] == plan['id'])
+            self.assertFalse(stored['active'])
+            self.assertEqual(stored['status'], 'Inativo')
+            self.assertEqual(len(client.get(execution_url, headers=headers).json()), 1)
+            self.assertEqual(client.post(execution_url, json=execution, headers=headers).status_code, 409)
             with b.SessionLocal() as db:
-                self.assertIsNotNone(db.get(b.Equipment, id))
+                self.assertTrue(db.get(b.Equipment, id).archived)
                 unlinked = b.Equipment(company_id=b.DEFAULT_COMPANY_ID, tag='FREE-'+secrets.token_hex(4),
                                        name='Instrumento sem plano', photo='test-only')
                 db.add(unlinked)
@@ -91,5 +110,26 @@ class MaintenanceAuthenticationTests(unittest.TestCase):
             self.assertEqual(client.delete(f'/equipment/{unlinked_id}', headers=headers).status_code, 200)
             with b.SessionLocal() as db:
                 self.assertIsNone(db.get(b.Equipment, unlinked_id))
+            with b.engine.begin() as connection:
+                connection.exec_driver_sql(
+                    'CREATE TABLE archive_test_reference (equipment_id INTEGER REFERENCES '
+                    'tagcheck_equipment(id) ON DELETE RESTRICT)'
+                )
+            try:
+                with b.SessionLocal() as db:
+                    other = b.Equipment(company_id=b.DEFAULT_COMPANY_ID, tag='FK-'+secrets.token_hex(4),
+                                        name='Instrumento com vínculo', photo='test-only')
+                    db.add(other)
+                    db.flush()
+                    other_id = other.id
+                    db.connection().exec_driver_sql('INSERT INTO archive_test_reference VALUES (?)', (other_id,))
+                    db.commit()
+                response = client.delete(f'/equipment/{other_id}', headers=headers)
+                self.assertEqual(response.status_code, 200, response.text)
+                self.assertTrue(response.json()['archived'])
+            finally:
+                with b.engine.begin() as connection:
+                    connection.exec_driver_sql('DROP TABLE archive_test_reference')
+
 
 if __name__=='__main__':unittest.main()

@@ -123,6 +123,8 @@ def migrate(engine, username, password, email):
             Equipment.__table__.create(connection)
         else:
             columns = {column['name'] for column in inspect(connection).get_columns('tagcheck_equipment')}
+            if 'archived' not in columns:
+                connection.execute(text('ALTER TABLE tagcheck_equipment ADD COLUMN archived BOOLEAN NOT NULL DEFAULT FALSE'))
             if 'company_id' not in columns:
                 connection.execute(text('ALTER TABLE tagcheck_equipment ADD COLUMN company_id INTEGER REFERENCES companies(id)'))
             if 'unit_id' not in columns:

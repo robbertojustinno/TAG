@@ -37,7 +37,9 @@ def import_maintenance(sessions, payload):
         created=skipped=assets_created=0
         for row in rows:
             tag=row['tag'].strip().upper()
-            equipment=db.scalar(select(Equipment).where(Equipment.company_id==company.id,Equipment.tag==tag))
+            equipment=db.scalar(select(Equipment).where(Equipment.company_id==company.id,Equipment.tag==tag).with_for_update())
+            if equipment is not None and equipment.archived:
+                skipped+=1;continue
             if equipment is None:
                 equipment=Equipment(company_id=company.id,tag=tag,name=row['equipment_name'],photo='',
                     sector=row.get('workshop',''),location=row.get('location',''),equipment_type=row.get('equipment_type',''),

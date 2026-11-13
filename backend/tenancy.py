@@ -185,6 +185,7 @@ class Tenancy:
             raise HTTPException(403, 'Superadmin required')
         return context
 
-def equipment_query(db, context):
+def equipment_query(db, context, *, include_archived=False):
     """The only application-level entry point for company-owned equipment queries."""
-    return db.query(Equipment).filter(Equipment.company_id == context.company_id)
+    query = db.query(Equipment).filter(Equipment.company_id == context.company_id)
+    return query if include_archived else query.filter(Equipment.archived.is_(False))

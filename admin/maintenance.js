@@ -30,12 +30,12 @@
    const q=d.querySelector('#mpSearch').value.toLocaleLowerCase(),status=d.querySelector('#mpStatus').value;
    shown=plans.filter(p=>(!status||p.status===status)&&[p.code,p.tag,p.equipment_name,p.workshop,p.location,p.equipment_type,p.activity,p.responsible].join(' ').toLocaleLowerCase().includes(q));
    d.querySelector('.mp-stats').innerHTML=[['Planos ativos',plans.filter(p=>p.active).length],['Atrasadas',plans.filter(p=>p.status==='Atrasada').length],['Vencem em até 7 dias',plans.filter(p=>['Vence hoje','Próximos 7 dias'].includes(p.status)).length],['Sem programação',plans.filter(p=>p.status==='Sem programação').length]].map(([k,v])=>tcH`<article><strong>${v}</strong><span>${esc(tcL(k))}</span></article>`).join('');
-   d.querySelector('tbody').innerHTML=shown.length?shown.map(p=>tcH`<tr><td><a class="mp-plan-link" href="#plano-${p.id}" data-sheet="${p.id}" aria-label="${esc(tcL('Abrir formulário'))} ${esc(p.code)}">${esc(p.code)}</a><br>${esc(p.tag)}<br><small>${esc(p.activity)}</small></td><td>${esc(p.equipment_name)}</td><td>${esc(p.workshop||'—')}<br><small>${esc(p.location)} · ${esc(p.equipment_type)}</small></td><td>${esc(p.responsible)}</td><td>${p.interval_days} dias</td><td>${date(p.next_due)}<br><small>${p.days_remaining===null?'':p.days_remaining+' '+tcL('dia(s)')}</small></td><td><span class="mp-badge ${p.status==='Atrasada'?'mp-late':''}">${esc(tcL(p.status))}</span></td><td><div class="mp-actions"><button data-edit="${p.id}">${tcL(editor?'Editar':'Detalhes')}</button>${executor&&p.active?tcH`<button data-execute="${p.id}">Registrar execução</button>`:''}<button data-history="${p.id}">Histórico</button></div></td></tr>`).join(''):tcH('<tr><td colspan="8">Nenhum plano encontrado. Cadastre um equipamento no TagCheck e crie seu primeiro plano.</td></tr>');
+   d.querySelector('tbody').innerHTML=shown.length?shown.map(p=>tcH`<tr><td><a class="mp-plan-link" href="#plano-${p.id}" data-sheet="${p.id}" aria-label="${esc(tcL('Abrir formulário'))} ${esc(p.code)}">${esc(p.code)}</a><br>${esc(p.tag)}<br><small>${esc(p.activity)}</small></td><td>${esc(p.equipment_name)}</td><td>${esc(p.workshop||'—')}<br><small>${esc(p.location)} · ${esc(p.equipment_type)}</small></td><td>${esc(p.responsible)}</td><td>${p.interval_days} dias</td><td>${date(p.next_due)}<br><small>${p.days_remaining===null?'':p.days_remaining+' '+tcL('dia(s)')}</small></td><td><span class="mp-badge ${p.status==='Atrasada'?'mp-late':''}">${esc(tcL(p.status))}</span></td><td><div class="mp-actions"><button data-edit="${p.id}">${tcL(editor&&!p.equipment_archived?'Editar':'Detalhes')}</button>${executor&&p.active?tcH`<button data-execute="${p.id}">Registrar execução</button>`:''}<button data-history="${p.id}">Histórico</button></div></td></tr>`).join(''):tcH('<tr><td colspan="8">Nenhum plano encontrado. Cadastre um equipamento no TagCheck e crie seu primeiro plano.</td></tr>');
   }
   async function load(){try{[plans,equipment]=await Promise.all([api('/plans'),api('/equipment')]);draw();message('Dados da empresa atual. Os intervalos e critérios devem seguir os manuais e procedimentos aplicáveis.');}catch(e){message(e.message,true);}}
   function field([key,label,type,required,example],data){
    const value=key==='status'?tcL(data[key]??''):(data[key]??'');let control;const common=`name="${key}" ${required?'required':''} ${example&&typeof example==='string'?`placeholder="${esc(tcL('Ex.:'))} ${esc(tcL(example))}"`:''}`;
-   if(type==='asset')control=tcH`<select ${common}><option value="">Selecione o equipamento</option>${equipment.map(e=>tcH`<option value="${e.id}" ${e.id===value?'selected':''}>${esc(e.tag)} — ${esc(e.name)}</option>`).join('')}</select>`;
+   if(type==='asset')control=tcH`<select ${common}><option value="">Selecione o equipamento</option>${equipment.concat(data.equipment_archived?[{id:value,tag:data.tag,name:data.equipment_name}]:[]).map(e=>tcH`<option value="${e.id}" ${e.id===value?'selected':''}>${esc(e.tag)} — ${esc(e.name)}</option>`).join('')}</select>`;
    else if(type==='select')control=tcH`<select ${common}><option value="">Selecione</option>${example.map(s=>tcH`<option value="${esc(s)}" ${s===value?'selected':''}>${esc(tcL(s))}</option>`).join('')}</select>`;
    else if(type==='readonly')control=tcH`<input ${common} readonly value="${esc(value)}" aria-readonly="true">`;
    else if(type==='textarea')control=tcH`<textarea ${common} maxlength="4000" rows="3">${esc(value)}</textarea>`;
@@ -43,7 +43,7 @@
    return tcH`<label>${esc(tcL(label))}${required?' *':''}${control}</label>`;
   }
   function form(plan={},execution=false){
-   const fields=execution?executionFields:planFields;const readonly=!execution&&!editor;
+   const fields=execution?executionFields:planFields;const readonly=!execution&&(!editor||plan.equipment_archived);
    panel.hidden=false;panel.innerHTML=tcH`<h2>${tcL(execution?'Registrar execução':plan.id?(readonly?'Detalhes do plano':'Editar plano'):'Novo plano')}</h2><p>${esc(plan.tag||'')} ${esc(plan.equipment_name||'')} · Campos com * são obrigatórios.</p><form><fieldset ${readonly?'disabled':''}><div class="mp-grid">${fields.map(f=>field(f,{active:true,...plan})).join('')}</div></fieldset><p class="mp-form-message" role="alert"></p>${readonly?'':tcH('<button type="submit">Salvar registro</button>')} <button type="button" data-cancel>Fechar formulário</button></form>`;
    panel.scrollIntoView({behavior:'smooth',block:'start'});panel.querySelector('[data-cancel]').onclick=()=>panel.hidden=true;
    const f=panel.querySelector('form');
@@ -67,9 +67,10 @@
     ['next_due','Próxima data','readonly'],['days_remaining','Dias restantes','readonly'],
     ['status','Situação','readonly'],['notes','Observações','textarea']
    ];
+   const editable = editor && !plan.equipment_archived;
    const data={...plan,equipment_label:plan.equipment_label||plan.equipment_name,next_due:date(plan.next_due)};
    panel.hidden=false;panel.id='plano-'+plan.id;
-   panel.innerHTML=tcH`<h2>Formulário da planilha · ${esc(plan.code)}</h2><p>Mesmos campos do Cronograma. Próxima data, dias restantes e situação são calculados automaticamente.</p><form><fieldset ${editor?'':'disabled'}><div class="mp-grid mp-sheet-grid">${fields.map(f=>field(f,data)).join('')}</div></fieldset><p class="mp-form-message" role="alert"></p>${editor?tcH('<button type="submit">Salvar alterações</button>'):''} <button type="button" data-cancel>Fechar formulário</button></form>`;
+   panel.innerHTML=tcH`<h2>Formulário da planilha · ${esc(plan.code)}</h2><p>Mesmos campos do Cronograma. Próxima data, dias restantes e situação são calculados automaticamente.</p><form><fieldset ${editable?'':'disabled'}><div class="mp-grid mp-sheet-grid">${fields.map(f=>field(f,data)).join('')}</div></fieldset><p class="mp-form-message" role="alert"></p>${editable?tcH('<button type="submit">Salvar alterações</button>'):''} <button type="button" data-cancel>Fechar formulário</button></form>`;
    const f=panel.querySelector('form');
    panel.querySelector('[data-cancel]').onclick=()=>{panel.hidden=true;};
    panel.scrollIntoView({behavior:'smooth',block:'start'});
@@ -90,7 +91,7 @@
    }
    f.elements.last_execution.oninput=calculate;f.elements.interval_days.oninput=calculate;
    f.onsubmit=async event=>{
-    event.preventDefault();if(!editor)return;
+    event.preventDefault();if(!editable)return;
     const button=f.querySelector('[type=submit]');button.disabled=true;
     try {
      const body={};for(const [key] of planFields)if(key in plan)body[key]=plan[key];

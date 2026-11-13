@@ -117,6 +117,7 @@ class Equipment(Base):
     ema = Column(Numeric(24, 10), nullable=True)
     reading_contribution = Column(Numeric(24, 10), nullable=True)
     calibration_record = Column(Text, nullable=True)
+    archived = Column(Boolean, nullable=False, default=False, server_default=false())
 
 class PasswordRecovery(Base):
     __tablename__ = 'password_recoveries'

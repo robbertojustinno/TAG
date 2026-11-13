@@ -78,7 +78,7 @@ def build_category_router(auth):
 
     def count_map(db, company_id):
         return dict(db.execute(select(Equipment.category_id, func.count(Equipment.id))
-                               .where(Equipment.company_id == company_id, Equipment.category_id.is_not(None))
+                               .where(Equipment.company_id == company_id, Equipment.archived.is_(False), Equipment.category_id.is_not(None))
                                .group_by(Equipment.category_id)).all())
 
     def ensure_unique(db, company_id, parent_id, slug, exclude_id=None):
