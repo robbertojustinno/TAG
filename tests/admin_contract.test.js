@@ -21,12 +21,16 @@ async function run() {
     window:{open:(url,target)=>{opened.push({url,target});return tab;}},
     document:{body:{appendChild(){}},getElementById:()=>({}),createElement(type){return {type,appendChild(input){this.input=input;},submit(){submitted.push(this);},remove(){this.removed=true;}};}}
   };
-  context.fetchWithTimeout=async(url,options)=>{
+  context.fetchWithTimeout=async(url,options,timeout)=>{
     requests.push({url,options});
     if (url.endsWith('/health')) {
       healthAttempts++;
+      assert.equal(timeout, 90000);
       if (healthAttempts === 1) throw new TypeError('Failed to fetch');
-      return { ok: healthAttempts >= 3 };
+      return { ok: true, json: async () => {
+        if (healthAttempts === 2) throw new SyntaxError('HTML during startup');
+        return { ok: true };
+      } };
     }
     let body=url.endsWith('/auth/login')?{token:'test-session',username:'legacy'}:
       url.endsWith('/pdf-access')?{token:'test-short-pdf'}:
