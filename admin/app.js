@@ -361,9 +361,9 @@ function resetCreateForm() {
   };
 }
 
-async function fetchWithTimeout(url, options = {}) {
+async function fetchWithTimeout(url, options = {}, timeoutMs = CONFIG.REQUEST_TIMEOUT_MS) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), CONFIG.REQUEST_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(url, { ...options, signal: controller.signal, cache: 'no-store' });
     if (response.ok) {
@@ -437,7 +437,23 @@ function normalizeItem(raw) {
   };
 }
 
+async function waitForLoginApi() {
+  const deadline = Date.now() + 90000;
+  while (navigator.onLine && Date.now() < deadline) {
+    try {
+      const response = await fetchWithTimeout(buildUrl(CONFIG.API_BASE_URL, CONFIG.ENDPOINTS.health), {}, Math.min(15000, deadline - Date.now()));
+      if (response.ok) return;
+    } catch {
+      // A new probe can succeed while the API is starting.
+    }
+    const remaining = deadline - Date.now();
+    if (remaining > 0) await new Promise(resolve => setTimeout(resolve, Math.min(2000, remaining)));
+  }
+  throw new Error(tcL('O servidor não respondeu a tempo. Confira a conexão e tente entrar novamente.'));
+}
+
 async function loginAdmin(username, password) {
+  await waitForLoginApi();
   const response = await fetchWithTimeout(buildUrl(CONFIG.API_BASE_URL, CONFIG.ENDPOINTS.login), {
     method: 'POST',
     headers: {
@@ -445,10 +461,9 @@ async function loginAdmin(username, password) {
       Accept: 'application/json'
     },
     body: JSON.stringify(username.includes('@') ? { email: username, password } : { username, password })
-  });
+  }, 30000);
 
   if (!response.ok) {
-    const text = await response.text();
     throw new Error(t('loginError'));
   }
 
@@ -1182,6 +1197,8 @@ function bindCreateFormLiveState() {
 function bindLoginEvents() {
   document.getElementById('loginForm')?.addEventListener('submit', async event => {
     event.preventDefault();
+    const button = document.getElementById('loginButton');
+    if (button.disabled) return;
     const username = normalizeText(document.getElementById('loginUserInput')?.value);
     const password = document.getElementById('loginPassInput')?.value || '';
     const feedback = document.getElementById('loginFeedback');
@@ -1191,8 +1208,8 @@ function bindLoginEvents() {
       return;
     }
 
-    feedback.innerHTML = tcH`<div class="notice">${t('loginLoading')}</div>`;
-    document.getElementById('loginButton').disabled = true;
+    feedback.innerHTML = tcH`<div class="notice">${tcL('Conectando ao servidor. Se estiver em repouso, aguarde enquanto ele inicia.')}</div>`;
+    button.disabled = true;
 
     try {
       const result = await loginAdmin(username, password);
@@ -1731,9 +1748,9 @@ async function boot() {
       if (identity.must_change_password) return renderPasswordChange();
       return logoutAdmin();
     }
-    if (navigator.onLine) await pingApi();
-    else state.apiReachable = false;
     if (state.authToken) {
+      if (navigator.onLine) await pingApi();
+      else state.apiReachable = false;
       if (state.apiReachable === false) {
         const context = window.TAGCHECK_OFFLINE?.loadContext();
         if (!context) throw new Error(tcL('Sessão offline indisponível ou expirada. Conecte-se e entre novamente.'));

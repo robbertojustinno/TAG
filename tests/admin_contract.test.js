@@ -12,29 +12,37 @@ function extract(name) {
 }
 async function run() {
   const requests=[], submitted=[], opened=[];
+  let healthAttempts = 0;
   const tab={opener:'old',close(){this.closed=true;}};
   const context={
     state:{authToken:'test-session'},
-    CONFIG:{API_BASE_URL:'https://api.example.invalid',ENDPOINTS:{login:'/auth/login',list:'/equipment',byTag:'/equipment/tag/:tag'},STORAGE_KEYS:{lastSearch:'test'}},
-    t:x=>x, normalizeItem:x=>x, localStorage:{setItem(){}}, crypto:{randomUUID:()=> 'test-tab'},
+    CONFIG:{API_BASE_URL:'https://api.example.invalid',ENDPOINTS:{login:'/auth/login',health:'/health',list:'/equipment',byTag:'/equipment/tag/:tag'},STORAGE_KEYS:{lastSearch:'test'}},
+    t:x=>x, tcL:x=>x, navigator:{onLine:true}, setTimeout: callback => callback(), normalizeItem:x=>x, localStorage:{setItem(){}}, crypto:{randomUUID:()=> 'test-tab'},
     window:{open:(url,target)=>{opened.push({url,target});return tab;}},
     document:{body:{appendChild(){}},getElementById:()=>({}),createElement(type){return {type,appendChild(input){this.input=input;},submit(){submitted.push(this);},remove(){this.removed=true;}};}}
   };
   context.fetchWithTimeout=async(url,options)=>{
     requests.push({url,options});
+    if (url.endsWith('/health')) {
+      healthAttempts++;
+      if (healthAttempts === 1) throw new TypeError('Failed to fetch');
+      return { ok: healthAttempts >= 3 };
+    }
     let body=url.endsWith('/auth/login')?{token:'test-session',username:'legacy'}:
       url.endsWith('/pdf-access')?{token:'test-short-pdf'}:
       url.includes('/tag/')?{id:1,tag:'OLD',name:'Old'}:[{id:1,tag:'OLD',name:'Old'}];
     return {ok:true,json:async()=>body};
   };
   vm.createContext(context);
-  for(const name of ['normalizeText','buildUrl','getAuthHeaders','loginAdmin','loadItems','searchByTag','openEquipmentPdf']) vm.runInContext(extract(name),context);
+  for(const name of ['normalizeText','buildUrl','getAuthHeaders','waitForLoginApi','loginAdmin','loadItems','searchByTag','openEquipmentPdf']) vm.runInContext(extract(name),context);
   const login=await context.loginAdmin('legacy','test-password');
   assert.equal(login.username,'legacy');
-  assert.deepEqual(JSON.parse(requests[0].options.body),{username:'legacy',password:'test-password'});
+  assert.equal(healthAttempts, 3);
+  assert.equal(requests.length, 4);
+  assert.deepEqual(JSON.parse(requests[3].options.body),{username:'legacy',password:'test-password'});
   await context.loadItems();
   await context.searchByTag('OLD');
-  for(const request of requests.slice(1)) assert.equal(request.options.headers.Authorization,'Bearer test-session');
+  for(const request of requests.slice(4)) assert.equal(request.options.headers.Authorization,'Bearer test-session');
   await context.openEquipmentPdf();
   assert.equal(opened[0].url,'about:blank');
   assert.equal(tab.opener,null);
