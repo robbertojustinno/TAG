@@ -1208,7 +1208,7 @@ function bindLoginEvents() {
       return;
     }
 
-    feedback.innerHTML = tcH`<div class="notice">${tcL('Conectando ao servidor. Se estiver em repouso, aguarde enquanto ele inicia.')}</div>`;
+    feedback.innerHTML = tcH`<div class="notice">${tcL('Conectando ao servidor.')}</div>`;
     button.disabled = true;
 
     try {
