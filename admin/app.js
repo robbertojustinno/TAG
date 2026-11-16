@@ -437,23 +437,7 @@ function normalizeItem(raw) {
   };
 }
 
-async function waitForLoginApi() {
-  const deadline = Date.now() + 120000;
-  while (navigator.onLine && Date.now() < deadline) {
-    try {
-      const response = await fetchWithTimeout(buildUrl(CONFIG.API_BASE_URL, CONFIG.ENDPOINTS.health), {}, Math.min(90000, deadline - Date.now()));
-      if (response.ok && (await response.json())?.ok === true) return;
-    } catch {
-      // A new probe can succeed while the API is starting.
-    }
-    const remaining = deadline - Date.now();
-    if (remaining > 0) await new Promise(resolve => setTimeout(resolve, Math.min(2000, remaining)));
-  }
-  throw new Error(tcL('O servidor não respondeu a tempo. Confira a conexão e tente entrar novamente.'));
-}
-
 async function loginAdmin(username, password) {
-  await waitForLoginApi();
   const response = await fetchWithTimeout(buildUrl(CONFIG.API_BASE_URL, CONFIG.ENDPOINTS.login), {
     method: 'POST',
     headers: {
@@ -461,7 +445,7 @@ async function loginAdmin(username, password) {
       Accept: 'application/json'
     },
     body: JSON.stringify(username.includes('@') ? { email: username, password } : { username, password })
-  }, 30000);
+  }, 120000);
 
   if (!response.ok) {
     throw new Error(t('loginError'));
@@ -1220,7 +1204,10 @@ function bindLoginEvents() {
         await finishLogin(result);
       }
     } catch (error) {
-      renderCurrentView(tcH`<div class="notice error">${escapeHtml(tcL(error.message) || t('loginError'))}</div>`);
+      const message = error.name === 'AbortError' || error instanceof TypeError
+        ? tcL('O servidor não respondeu a tempo. Confira a conexão e tente entrar novamente.')
+        : tcL(error.message) || t('loginError');
+      renderCurrentView(tcH`<div class="notice error">${escapeHtml(message)}</div>`);
     }
   });
 }
