@@ -52,6 +52,34 @@ class CalibrationTests(unittest.TestCase):
         self.assertEqual(self.client.get(f'/equipment/{item["id"]}/master-report-html',headers=foreign).status_code,404)
 
         self.assertEqual(self.update(item,calibration_record='{}').json()['calibration_record'],{})
+    def test_master_report_includes_saved_instrument_and_certificate_details(self):
+        record = {
+            'requester_address': 'Endereço de teste <A>',
+            'decision_rule': 'CRITÉRIO-007',
+            'standards': [{'identification': 'PADRÃO-01', 'valid_until': '2027-12-31'}],
+            'results': [{'reference': '50', 'indicated': '50', 'input_unit': 'bar',
+                         'output_unit': 'bar', 'low': '47,5', 'high': '53,5',
+                         'error': '0,03', 'uncertainty': '0,17', 'neff': '41', 'immersion': '21 mm'}],
+        }
+        response = self.create(calibration_record=json.dumps(record), model='MODELO-XYZ',
+                               serial_number='SN-XYZ', notes='NOTA-XYZ', equipment_type='TIPO-XYZ',
+                               measurand='Pressão diferencial', measurement_unit='bar',
+                               range_min='0', range_max='100', ema='1')
+        self.assertEqual(response.status_code, 200, response.text)
+        item_id = response.json()['id']
+        html = self.client.get(f'/equipment/{item_id}/master-report-html?lang=en', headers=self.headers)
+        self.assertEqual(html.status_code, 200)
+        self.assertIn('<h3>Metrological data</h3>', html.text)
+        self.assertIn('Endereço de teste &lt;A&gt;', html.text)
+        self.assertRegex(html.text, r'<dt>Minimum range</dt><dd>0(?:E-10|\.0+)?</dd>')
+        pdf = self.client.get(f'/equipment/{item_id}/master-report-pdf', headers=self.headers)
+        self.assertEqual(pdf.status_code, 200)
+        pdf_text = ''.join(page.extract_text() for page in PdfReader(BytesIO(pdf.content)).pages)
+        for value in ('MODELO-XYZ', 'SN-XYZ', 'NOTA-XYZ', 'TIPO-XYZ', 'Pressão diferencial',
+                      '2027-12-31', '47,5', '53,5', '0,03', '0,17', '21 mm', 'CRITÉRIO-007'):
+            self.assertIn(value, html.text)
+            self.assertIn(value, pdf_text)
+
     def test_invalid_record_rejected_before_upload(self):
         for record in ('[]','{"unknown":"x"}','{"results":[{"reference":4}]}'):
             self.assertEqual(self.create(calibration_record=record).status_code,422)
