@@ -86,7 +86,7 @@ def evaluate_points(item, record):
         unit_out = row.get('output_unit', '').strip().casefold()
         error = indication - ref if ref is not None and indication is not None and unit_in and unit_in == unit_out else None
         ema = number(item.ema)
-        eligible = error is not None and ema is not None and ema >= 0 and str(item.measurement_unit or '').strip().casefold() == unit_out and record.get('document_type', '').strip().casefold() != 'carta de inspeção'
+        eligible = not record.get('decision_rule', '').strip() and error is not None and ema is not None and ema >= 0 and str(item.measurement_unit or '').strip().casefold() == unit_out and record.get('document_type', '').strip().casefold() != 'carta de inspeção'
         evaluated.append({'error': str(error) if error is not None else 'Não calculado: informe números e unidades iguais',
                           'acceptance': ('Conforme' if abs(error) <= ema else 'Não conforme') if eligible else 'Não avaliado'})
     return evaluated
@@ -106,7 +106,11 @@ def master_pdf(item, company_name):
         t=LongTable(rows,colWidths=[57*mm,123*mm],hAlign='LEFT',splitInRow=1)
         t.setStyle(TableStyle([('GRID',(0,0),(-1,-1),.35,colors.HexColor('#cfd6e0')),('BACKGROUND',(0,0),(0,-1),colors.HexColor('#eef2f7')),('VALIGN',(0,0),(-1,-1),'TOP'),('LEFTPADDING',(0,0),(-1,-1),6),('BOTTOMPADDING',(0,0),(-1,-1),5)]));story.extend([t,Spacer(1,3*mm)])
     section('1. Dados do instrumento',[(label,getattr(item,key,None)) for key,label in [('tag','TAG'),('name','Descrição'),('equipment_type','Tipo'),('manufacturer','Fabricante'),('model','Modelo'),('serial_number','Número de série'),('sector','Departamento'),('location','Localização'),('calibration_date','Última calibração'),('next_calibration_date','Próxima calibração'),('status','Status')]])
-    section('2. Dados metrológicos',[(label,getattr(item,key,None)) for key,label in [('measurand','Grandeza'),('measurement_unit','Unidade'),('range_min','Faixa mínima'),('range_max','Faixa máxima'),('accuracy_class','Classe'),('resolution','Resolução'),('ema','EMA'),('reading_contribution','Contribuição da leitura')]])
+    def metrology_value(key):
+        value = getattr(item, key, None)
+        return format(value, 'f').rstrip('0').rstrip('.').replace('.', ',') if isinstance(value, Decimal) and value.as_tuple().exponent < 0 else value
+
+    section('2. Dados Metrológicos',[(label,metrology_value(key)) for key,label in [('measurand','Grandeza'),('measurement_unit','Unidade'),('range_min','Faixa mínima'),('range_max','Faixa máxima'),('accuracy_class','Classe'),('resolution','Resolução'),('ema','EMA'),('reading_contribution','Contribuição estimada da leitura')]])
     section('3. Certificado, método e condições',[(label,record.get(key)) for key,label in FIELDS.items()])
     for table,title in [('standards','4. Padrões e rastreabilidade'),('results','5. Resultados por ponto')]:
         story.append(Paragraph(title,styles['Heading2']))
@@ -187,6 +191,47 @@ def master_html(item, company_name, unit_name='', language='pt'):
         mapping['gaps']='\n'.join(report_text(value, language) for value in missing)
     for field,value in mapping.items():
         fill(field,value)
+    def report_rows(pairs):
+        return ''.join(
+            '<tr><th scope="row" class="label">' + text(report_text(label, language))
+            + '</th><td style="white-space:pre-wrap;overflow-wrap:anywhere">' + text(value) + '</td></tr>'
+            for label, value in pairs if value is not None and value != ''
+        )
+
+    instrument_fields = [
+        ('equipment_type', 'Tipo'), ('model', 'Modelo'), ('serial_number', 'Número de série'),
+        ('measurand', 'Grandeza'), ('measurement_unit', 'Unidade'),
+        ('range_min', 'Faixa mínima'), ('range_max', 'Faixa máxima'),
+        ('accuracy_class', 'Classe'), ('resolution', 'Resolução'),
+        ('ema', 'EMA'), ('reading_contribution', 'Contribuição estimada da leitura'), ('notes', 'Notas'),
+    ]
+    details = report_rows((label, getattr(item, key, None)) for key, label in instrument_fields)
+    details += report_rows((label, record.get(key)) for key, label in FIELDS.items())
+    sections = ['<table>' + details + '</table>'] if details else []
+    section_labels = {
+        'pt': ('Dados complementares de calibração', 'Padrão', 'Ponto'),
+        'en': ('Additional calibration data', 'Reference standard', 'Point'),
+        'es': ('Datos complementarios de calibración', 'Patrón', 'Punto'),
+    }
+    title, standard_label, point_label = section_labels[language]
+    computed_points = evaluate_points(item, record)
+    for table, heading in [('standards', standard_label), ('results', point_label)]:
+        for index, row in enumerate(record.get(table, []), 1):
+            pairs = [(label, row.get(key)) for key, label in TABLES[table].items()]
+            if table == 'results':
+                evaluated = computed_points[index - 1]
+                pairs.append(('Erro calculado (indicação - referência)', evaluated['error']))
+                pairs.append(('Avaliação: |erro| <= EMA (sem incerteza)', evaluated['acceptance']))
+            values = report_rows(pairs)
+            if values:
+                sections.append(f'<h3>{heading} {index}</h3><table>{values}</table>')
+    if sections:
+        appendix = '<section class="section calibration-details"><h3>' + title + '</h3>' + ''.join(sections) + '</section>'
+        index = source.rfind('</main>') + len('</main>')
+        source = source[:index] + appendix + source[index:]
+        source = source.replace('</style>', '.calibration-details { break-inside:auto; } @media print { .calibration-details { padding:12mm; } } .calibration-details table { margin-bottom:10px; } .calibration-details tr { break-inside:avoid; }</style>', 1)
+    source = source.replace('IMBEL – Indústria de Material Bélico do Brasil', text(company_name))
+
     rows=[]
     for row in record.get('results',[]):
         low,high=row.get('low',''),row.get('high','')

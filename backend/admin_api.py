@@ -8,6 +8,11 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 if __package__:
+    from .audit import record_identity
+else:
+    from audit import record_identity
+
+if __package__:
     from .trials import status as trial_status, now as trial_now, aware as trial_aware
     from .models import Company, Unit, User, UserCompany
     from .passwords import hash_password, verify_password, is_demo_account
@@ -248,6 +253,7 @@ def build_router(auth):
                 raise HTTPException(422, 'A confirmação deve coincidir com a nova senha.')
             if payload.new_password == payload.current_password:
                 raise HTTPException(422, 'A nova senha deve ser diferente da senha atual.')
+            record_identity(user, claims.get('company_id'))
             user.password_hash = hash_password(payload.new_password)
             user.must_change_password = False
             result = login_result(db, user, legacy=bool(claims.get('legacy')),

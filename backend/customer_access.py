@@ -6,6 +6,11 @@ from pydantic import Field
 from sqlalchemy import select, func, update
 from sqlalchemy.exc import IntegrityError
 if __package__:
+    from .audit import record_identity
+else:
+    from audit import record_identity
+
+if __package__:
     from .models import Company, User, UserCompany, PasswordRecovery
     from .admin_api import Input, NewCompany, NewUser, commit, company_json, user_json
     from .passwords import hash_password, verify_password
@@ -161,6 +166,7 @@ def build_customer_router(auth):
                 raise HTTPException(400,'Link inválido, expirado ou já utilizado.')
             if verify_password(user.password_hash,payload.new_password):
                 raise HTTPException(422,'Escolha uma senha diferente da anterior.')
+            record_identity(user)
             user.password_hash=hash_password(payload.new_password);user.must_change_password=False
             row.used_at=now();row.token_digest=None
             db.execute(update(PasswordRecovery).where(PasswordRecovery.user_id==user.id).values(token_digest=None))

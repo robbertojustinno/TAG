@@ -4,11 +4,12 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>TagCheck Admin</title>
-  <link rel="stylesheet" href="./admin-layout.css?v=20261103-header" />
-  <script src="./theme.js?v=20261102-i18n"></script>
+  <link rel="stylesheet" href="./admin-layout.css?v=20261122-central" />
+  <script src="./theme.js?v=20261122-central"></script>
   <link rel="icon" type="image/png" href="./public/favicon.png">
 <link rel="apple-touch-icon" href="./public/favicon.png">
   <link rel="stylesheet" href="./maintenance.css?v=20261104-upload">
+  <link rel="stylesheet" href="./central-theme.css?v=20261122">
 </head>
 <body>
   <div class="app-shell">
@@ -38,6 +39,7 @@
         <button id="companyAdminButton" class="outline-button hidden"><span data-tc-text="Administração">Administração</span></button>
         <button id="superadminButton" class="outline-button hidden"><span data-tc-text="Super Admin">Super Admin</span></button>
         </div>
+        <button id="moduleHomeButton" type="button" class="outline-button hidden">Módulos</button>
         <button id="logoutButton" class="outline-button hidden"><span data-tc-text="Sair">Sair</span></button>
       </nav>
     </header>
@@ -70,7 +72,8 @@
   <script src="./offline-store.js?v=20261006-storage-fallback"></script>
   <script src="./calibration.js?v=20261104-complete"></script>
   <script src="./customer-access.js?v=20261104-complete"></script>
-  <script src="./app.js?v=20261116-login-direct"></script>
+  <script src="./modules.js?v=20261122"></script>
+  <script src="./app.js?v=20261122-modules"></script>
   <script src="./maintenance.js?v=20261113-equipment-archive"></script>
   <script src="./offline-integration.js?v=20261104-complete"></script>
   <div class="footer-note">

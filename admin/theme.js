@@ -1,7 +1,7 @@
 (() => {
   const key = 'tagcheck.theme';
-  let theme = 'dark';
-  try { if (localStorage.getItem(key) === 'light') theme = 'light'; } catch (_) {}
+  let theme = 'light';
+  try { if (localStorage.getItem(key) === 'dark') theme = 'dark'; } catch (_) {}
   function apply(value) {
     theme = value === 'light' ? 'light' : 'dark';
     document.documentElement.dataset.theme = theme;

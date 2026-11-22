@@ -300,6 +300,9 @@ function syncHeaderLanguage() {
     taggingButton.textContent = tcL('Tagueamento');
     taggingButton.classList.toggle('hidden', !state.authToken);
   }
+  const modulesButton = document.getElementById('moduleHomeButton');
+  modulesButton.classList.toggle('hidden', !state.authToken);
+  modulesButton.textContent = tcL('Módulos');
   logoutButton.textContent = t('logout');
   logoutButton.classList.toggle('hidden', !state.authToken);
   document.getElementById('maintenanceButton').classList.toggle('hidden', !state.authToken || !state.companyId || !!state.pendingPassword);
@@ -495,7 +498,7 @@ async function finishLogin(result) {
   await loadUnits();
   await loadCategories();
   await loadItems();
-  if (state.authToken) renderApp();
+  if (state.authToken) renderCurrentView();
 }
 
 function requirePasswordChange(token) {
@@ -1680,16 +1683,21 @@ function renderCurrentView(notice = '') {
     return;
   }
 
-  if (state.showCompanyAdmin && state.role === 'company_admin' && !state.isSuperadmin) {
-    window.TAGCHECK_COMPANY.mount(app, companyRequest, escapeHtml, () => {
-      state.showCompanyAdmin = false; renderCurrentView();
-    }, refreshCompanyIdentity);
-  } else if (state.showSuperadmin && state.isSuperadmin) {
-    window.TAGCHECK_SUPERADMIN.mount(app, superadminRequest, escapeHtml, () => {
-      state.showSuperadmin = false;
-      renderCurrentView();
-    }, refreshCompanyIdentity);
-  } else renderApp(notice);
+  if (document.body.dataset.page === 'maintenance') return renderApp(notice);
+  const module = location.hash.slice(1);
+  state.showCompanyAdmin = module === 'empresa' && state.role === 'company_admin' && !state.isSuperadmin;
+  state.showSuperadmin = ['superadmin', 'auditoria'].includes(module) && state.isSuperadmin;
+  if (state.showCompanyAdmin) {
+    window.TAGCHECK_COMPANY.mount(app, companyRequest, escapeHtml, openModuleHome, refreshCompanyIdentity);
+  } else if (state.showSuperadmin && module === 'auditoria') {
+    renderAudit();
+  } else if (state.showSuperadmin) {
+    window.TAGCHECK_SUPERADMIN.mount(app, superadminRequest, escapeHtml, openModuleHome, refreshCompanyIdentity);
+  } else if (module === 'instrumentos' && state.companyId) {
+    renderApp(notice);
+  } else {
+    renderModuleHome(notice);
+  }
 }
 
 async function superadminRequest(path, method = 'GET', data, blob = false) {
@@ -1761,7 +1769,7 @@ async function boot() {
       await loadUnits();
       await loadCategories();
       await loadItems();
-      renderApp(state.apiReachable === false ? tcH('<div class="notice">Modo offline ativo. Cadastros ficam isolados na empresa selecionada e serão sincronizados quando a conexão voltar.</div>') : '');
+      renderCurrentView(state.apiReachable === false ? tcH('<div class="notice">Modo offline ativo. Cadastros ficam isolados na empresa selecionada e serão sincronizados quando a conexão voltar.</div>') : '');
     } else {
       renderLogin();
     }
@@ -1777,12 +1785,12 @@ async function boot() {
         await loadUnits();
         await loadCategories();
         await loadItems();
-        renderApp(tcH('<div class="notice">Modo offline ativo. Os dados locais pertencem somente à empresa atual.</div>'));
+        renderCurrentView(tcH('<div class="notice">Modo offline ativo. Os dados locais pertencem somente à empresa atual.</div>'));
         return;
       } catch (_) {}
     }
     if (state.authToken) {
-      renderApp(tcH`<div class="notice error">${escapeHtml(tcL(error.message) || t('listError'))}</div>`);
+      renderCurrentView(tcH`<div class="notice error">${escapeHtml(tcL(error.message) || t('listError'))}</div>`);
     } else {
       renderLogin(tcH`<div class="notice error">${escapeHtml(tcL(error.message) || t('apiFail'))}</div>`);
     }
@@ -1790,16 +1798,20 @@ async function boot() {
 }
 
 
-logoutButton.addEventListener('click', logoutAdmin);
+window.addEventListener('hashchange', () => renderCurrentView());
+document.getElementById('moduleHomeButton').addEventListener('click', openModuleHome);
+logoutButton.addEventListener('click', () => {
+  history.replaceState(null, '', location.pathname + location.search);
+  logoutAdmin();
+});
 document.getElementById('companyAdminButton').addEventListener('click', () => {
   if (!state.authToken || state.role !== 'company_admin' || state.isSuperadmin) return;
-  state.showCompanyAdmin = true; renderCurrentView();
+  openAdminModule('empresa');
 });
 
 document.getElementById('superadminButton').addEventListener('click', () => {
   if (!state.authToken || !state.isSuperadmin) return;
-  state.showSuperadmin = true;
-  renderCurrentView();
+  openAdminModule('superadmin');
 });
 
 openCampoButton?.addEventListener('click', event => {
