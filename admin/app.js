@@ -300,6 +300,11 @@ function syncHeaderLanguage() {
     taggingButton.textContent = tcL('Tagueamento');
     taggingButton.classList.toggle('hidden', !state.authToken);
   }
+  const modulesButton = document.getElementById('moduleHomeButton');
+  if (modulesButton) {
+    modulesButton.textContent = moduleMenuLabels().title;
+    modulesButton.classList.toggle('hidden', !state.authToken);
+  }
   logoutButton.textContent = t('logout');
   logoutButton.classList.toggle('hidden', !state.authToken);
   document.getElementById('maintenanceButton').classList.toggle('hidden', !state.authToken || !state.companyId || !!state.pendingPassword);
@@ -1789,6 +1794,52 @@ async function boot() {
   }
 }
 
+
+function moduleMenuLabels() {
+  return {
+    pt: { title: 'Módulos', close: 'Fechar' },
+    en: { title: 'Modules', close: 'Close' },
+    es: { title: 'Módulos', close: 'Cerrar' },
+  }[state.language] || { title: 'Módulos', close: 'Fechar' };
+}
+
+document.getElementById('moduleHomeButton')?.addEventListener('click', () => {
+  if (!state.authToken || state.pendingPassword) return;
+  const labels = moduleMenuLabels();
+  const menu = document.createElement('dialog');
+  menu.className = 'card panel';
+  menu.setAttribute('aria-labelledby', 'moduleMenuTitle');
+  menu.style.cssText = 'max-width:min(36rem, calc(100vw - 2rem)); color:var(--text); background:var(--panel)';
+  const title = document.createElement('h2');
+  title.id = 'moduleMenuTitle';
+  title.textContent = labels.title;
+  const actions = document.createElement('div');
+  actions.className = 'inline-actions';
+  for (const id of ['openViewerButton', 'openCampoButton', 'openTaggingButton',
+                    'maintenanceButton', 'companyAdminButton', 'superadminButton']) {
+    const target = document.getElementById(id);
+    if (!target || target.classList.contains('hidden')) continue;
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'outline-button';
+    button.textContent = target.textContent.trim();
+    button.addEventListener('click', () => {
+      menu.close();
+      target.click();
+    });
+    actions.append(button);
+  }
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.className = 'secondary-button';
+  close.textContent = labels.close;
+  close.addEventListener('click', () => menu.close());
+  actions.append(close);
+  menu.append(title, actions);
+  menu.addEventListener('close', () => menu.remove(), { once: true });
+  document.body.append(menu);
+  menu.showModal();
+});
 
 logoutButton.addEventListener('click', logoutAdmin);
 document.getElementById('companyAdminButton').addEventListener('click', () => {

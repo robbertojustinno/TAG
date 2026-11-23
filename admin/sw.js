@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tagcheck-admin-20261116-login-direct';
+const CACHE_NAME = 'tagcheck-admin-20261123-modules';
 const APP_SHELL = [
   "./manutencao/",
   "./maintenance.js?v=20261113-equipment-archive",
@@ -12,7 +12,7 @@ const APP_SHELL = [
   "./offline-store.js?v=20261006-storage-fallback",
   "./calibration.js?v=20261104-complete",
   "./customer-access.js?v=20261104-complete",
-  "./app.js?v=20261116-login-direct",
+  "./app.js?v=20261123-modules",
   "./offline-integration.js?v=20261104-complete",
   './',
   './index.html',
