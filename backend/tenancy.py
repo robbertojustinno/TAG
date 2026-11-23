@@ -154,6 +154,11 @@ class Tenancy:
             with self.sessions() as db:
                 if trial_status(db.get(Company, context.company_id))['trial_status'] == 'expired':
                     raise HTTPException(403, 'Período de teste encerrado. Contate a ROVIX para contratar ou prorrogar. Seus dados estão preservados.')
+        if __package__:
+            from .audit import record_actor
+        else:
+            from audit import record_actor
+        record_actor(context)
         return context
 
     def read_context(self, request: Request, authorization: str | None = Header(default=None)):

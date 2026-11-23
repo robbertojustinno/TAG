@@ -10,6 +10,11 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy import select, update, func
 from sqlalchemy.exc import IntegrityError
 if __package__:
+    from .audit import record_update
+else:
+    from audit import record_update
+
+if __package__:
     from .models import Company, Equipment, utcnow
     from .maintenance_api import MaintenancePlan, MaintenanceExecution, PlanInput
 else:
@@ -174,8 +179,10 @@ def build_maintenance_upload_router(auth):
                         db.add(MaintenancePlan(company_id=ctx.company_id,equipment_id=e.id,code=plan.code,data=plan.model_dump_json(),updated_by=ctx.user_id))
                     elif item['action']=='atualizar':
                         merged={**json.loads(p.data),**values};validated=PlanInput(**merged)
+                        previous_plan = json.loads(p.data)
                         result=db.execute(update(MaintenancePlan).where(MaintenancePlan.id==p.id,MaintenancePlan.company_id==ctx.company_id,MaintenancePlan.revision==p.revision).values(data=validated.model_dump_json(),revision=p.revision+1,updated_by=ctx.user_id,updated_at=utcnow()))
                         if result.rowcount!=1: raise HTTPException(409,'Plano alterado durante a importação. Confira novamente.')
+                        record_update(db, ctx, 'maintenance_plans', p.id, previous_plan, validated.model_dump(mode='json'))
                 summary=report['summary']
             return {'ok':True,'summary':summary,'ignored_rows':ignored}
         except IntegrityError: raise HTTPException(409,'Um cadastro foi alterado durante a importação. Confira novamente; nenhuma alteração desta carga foi gravada.') from None

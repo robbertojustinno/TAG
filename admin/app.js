@@ -1795,6 +1795,83 @@ async function boot() {
 }
 
 
+function renderAudit() {
+  if (!state.authToken || !state.isSuperadmin) return;
+  app.innerHTML = tcH`<section class="screen"><div class="card panel">
+    <div class="inline-actions"><h2>Auditoria</h2><button type="button" class="outline-button" data-audit-back>Voltar</button></div>
+    <form id="auditFilters" class="grid-2">
+      <label>Empresa (ID)<input class="input" type="number" min="1" name="target_company_id"></label>
+      <label>Usuário (ID)<input class="input" type="number" min="1" name="actor_id"></label>
+      <label>Registro<select class="input" name="entity"><option value="">Todos</option>
+        ${Object.entries(auditEntities).map(([key, label]) => tcH`<option value="${key}">${label}</option>`).join('')}</select></label>
+      <label>Ação<select class="input" name="action"><option value="">Todas</option>
+        <option value="create">Criação</option><option value="update">Alteração</option><option value="delete">Exclusão</option>
+      </select></label>
+      <label>De<input class="input" type="datetime-local" name="start"></label>
+      <label>Até<input class="input" type="datetime-local" name="end"></label>
+      <button class="primary-button">Filtrar</button>
+    </form>
+    <p data-audit-status role="status"></p>
+    <div data-audit-results></div>
+    <button type="button" class="outline-button" data-audit-more hidden>Mais registros</button>
+  </div></section>`;
+  app.querySelector('[data-audit-back]').addEventListener('click', () => renderCurrentView());
+  const form = app.querySelector('#auditFilters');
+  const results = app.querySelector('[data-audit-results]');
+  const status = app.querySelector('[data-audit-status]');
+  const more = app.querySelector('[data-audit-more]');
+  let filters = new URLSearchParams();
+  let cursor;
+  let requestNumber = 0;
+  async function load(append = false) {
+    const current = ++requestNumber;
+    const query = new URLSearchParams(filters);
+    if (append && cursor) query.set('before_id', cursor);
+    status.textContent = tcL('Carregando...');
+    more.hidden = true;
+    try {
+      const rows = await companyRequest('/superadmin/audit?' + query);
+      if (current !== requestNumber) return;
+      const markup = rows.map(row => {
+        const actor = row.actor_email || (row.actor_id ? String(row.actor_id) : tcL('Sistema ou origem sem identificação'));
+        const values = Object.entries(row.changes).map(([key, value]) =>
+          tcH`<dt>${escapeHtml(key)}</dt><dd><pre style="white-space:pre-wrap;overflow-wrap:anywhere">${escapeHtml(value.redacted ? tcL('Alteração protegida') : JSON.stringify(value, null, 2))}</pre></dd>`).join('');
+        const action = {create: 'Criação', update: 'Alteração', delete: 'Exclusão'}[row.action] || row.action;
+        return tcH`<details class="audit-entry"><summary>
+          ${escapeHtml(new Date(row.occurred_at).toLocaleString(window.TAGCHECK_I18N.locale))} ·
+          ${escapeHtml(actor)} · ${tcL('Empresa')} ${escapeHtml(row.company_id)} ·
+          ${escapeHtml(tcL(action))} · ${escapeHtml(tcL(auditEntities[row.entity] || row.entity))} #${escapeHtml(row.entity_id)}
+        </summary><dl>${values}</dl></details>`;
+      }).join('');
+      if (append) results.insertAdjacentHTML('beforeend', markup);
+      else results.innerHTML = markup;
+      cursor = rows.at(-1)?.id;
+      more.hidden = rows.length < 50;
+      status.textContent = rows.length ? '' : tcL('Nenhum registro encontrado.');
+    } catch (error) {
+      if (current === requestNumber) status.textContent = error.message;
+    }
+  }
+  form.addEventListener('submit', event => {
+    event.preventDefault();
+    filters = new URLSearchParams();
+    for (const [key, value] of new FormData(form)) {
+      if (value) filters.set(key, ['start', 'end'].includes(key) ? new Date(value).toISOString() : value);
+    }
+    load();
+  });
+  more.addEventListener('click', () => load(true));
+  load();
+}
+
+const auditEntities = {
+  companies: 'Empresas', users: 'Usuários', units: 'Unidades', user_companies: 'Vínculos',
+  asset_categories: 'Categorias', tagcheck_equipment: 'Instrumentos', tagging_hierarchies: 'Tagueamento',
+  maintenance_plans: 'Planos de manutenção', maintenance_executions: 'Execuções de manutenção',
+  billing_sandbox: 'Cobranças de teste', billing_production: 'Assinaturas',
+  billing_production_invoices: 'Cobranças', billing_production_extra_invoices: 'Cobranças avulsas',
+};
+
 function moduleMenuLabels() {
   return {
     pt: { title: 'Módulos', close: 'Fechar' },
@@ -1815,20 +1892,36 @@ document.getElementById('moduleHomeButton')?.addEventListener('click', () => {
   title.textContent = labels.title;
   const actions = document.createElement('div');
   actions.className = 'inline-actions';
+  function addModule(label, open) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'outline-button';
+    button.textContent = label;
+    button.addEventListener('click', () => {
+      menu.close();
+      open();
+    });
+    actions.append(button);
+  }
+  if (state.companyId) {
+    addModule(tcL('Instrumentos'), () => {
+      if (document.body.dataset.page === 'maintenance') {
+        location.assign(window.TAGCHECK_I18N.url(new URL('./', document.baseURI).href));
+        return;
+      }
+      state.showCompanyAdmin = false;
+      state.showSuperadmin = false;
+      renderCurrentView();
+      document.getElementById('searchTagInput')?.focus();
+    });
+  }
   for (const id of ['openViewerButton', 'openCampoButton', 'openTaggingButton',
                     'maintenanceButton', 'companyAdminButton', 'superadminButton']) {
     const target = document.getElementById(id);
     if (!target || target.classList.contains('hidden')) continue;
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'outline-button';
-    button.textContent = target.textContent.trim();
-    button.addEventListener('click', () => {
-      menu.close();
-      target.click();
-    });
-    actions.append(button);
+    addModule(target.textContent.trim(), () => target.click());
   }
+  if (state.isSuperadmin) addModule(tcL('Auditoria'), renderAudit);
   const close = document.createElement('button');
   close.type = 'button';
   close.className = 'secondary-button';

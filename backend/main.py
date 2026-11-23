@@ -82,6 +82,11 @@ else:
     from billing_production_api import build_production_billing_router
     from customer_access import build_customer_router
 
+if __package__:
+    from .audit import audit_request, build_audit_router, install_audit
+else:
+    from audit import audit_request, build_audit_router, install_audit
+
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "legacy-admin@tagcheck.invalid").strip().lower()
 engine = make_engine(DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
@@ -151,7 +156,9 @@ DEFAULT_COMPANY_ID = MIGRATION["default_company_id"]
 LEGACY_USER_ID = MIGRATION["legacy_user_id"]
 
 auth = Tenancy(SessionLocal, ADMIN_TOKEN, DEFAULT_COMPANY_ID, LEGACY_USER_ID, ADMIN_USERNAME, ADMIN_PASSWORD)
+install_audit(SessionLocal)
 app = FastAPI()
+app.include_router(build_audit_router(auth))
 app.include_router(build_router(auth))
 app.include_router(build_company_router(auth))
 app.include_router(build_category_router(auth))
@@ -171,7 +178,11 @@ async def safe_validation_error(request: Request, exc: RequestValidationError):
 
 @app.middleware("http")
 async def prevent_private_caching(request: Request, call_next):
-    response = await call_next(request)
+    audit_token = audit_request.set({})
+    try:
+        response = await call_next(request)
+    finally:
+        audit_request.reset(audit_token)
     response.headers["Cache-Control"] = "no-store"
     response.headers["Referrer-Policy"] = "no-referrer"
     response.headers["X-Content-Type-Options"] = "nosniff"

@@ -8,6 +8,11 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime, UniqueConstraint, select, update
 from sqlalchemy.exc import IntegrityError
 if __package__:
+    from .audit import record_update
+else:
+    from audit import record_update
+
+if __package__:
     from .models import Base, Equipment, utcnow
 else:
     from models import Base, Equipment, utcnow
@@ -146,8 +151,11 @@ def build_maintenance_router(auth):
                 raise HTTPException(409,'Última execução possui histórico; registre uma nova execução para atualizá-la.')
             if row.equipment_id != payload.equipment_id:
                 raise HTTPException(409,'Para outro equipamento, crie um novo plano e inative este.')
+            previous_plan = json.loads(row.data)
             result=db.execute(update(MaintenancePlan).where(MaintenancePlan.id==id,MaintenancePlan.company_id==ctx.company_id,MaintenancePlan.revision==payload.revision).values(code=payload.code,data=json.dumps(payload.model_dump(mode='json',exclude={'revision'}),ensure_ascii=False),revision=payload.revision+1,updated_by=ctx.user_id,updated_at=utcnow()))
             if not result.rowcount: raise HTTPException(409,'Plano alterado por outro usuário. Recarregue.')
+            record_update(db, ctx, 'maintenance_plans', id, previous_plan,
+                          payload.model_dump(mode='json', exclude={'revision'}))
             save(db,row);db.expire_all();return output(db,find(db,id,ctx),ctx)
 
     @router.get('/plans/{id}/executions')
@@ -167,8 +175,10 @@ def build_maintenance_router(auth):
             if data.get('last_execution') and completed<date.fromisoformat(data['last_execution']):
                 raise HTTPException(409,'Execução anterior à última execução do plano.')
             snapshot=output(db,row,ctx);data['last_execution']=completed.isoformat()
+            previous_plan = json.loads(row.data)
             result=db.execute(update(MaintenancePlan).where(MaintenancePlan.id==id,MaintenancePlan.company_id==ctx.company_id,MaintenancePlan.revision==payload.revision).values(data=json.dumps(data,ensure_ascii=False),revision=payload.revision+1,updated_by=ctx.user_id,updated_at=utcnow()))
             if not result.rowcount: raise HTTPException(409,'Plano alterado. Recarregue antes de registrar novamente.')
+            record_update(db, ctx, 'maintenance_plans', id, previous_plan, data)
             record=payload.model_dump(mode='json',exclude={'revision'});record['plan_snapshot']=json.loads(json.dumps(snapshot,default=str))
             history=MaintenanceExecution(company_id=ctx.company_id,plan_id=id,data=json.dumps(record,ensure_ascii=False),created_by=ctx.user_id)
             db.add(history);db.commit();return {'id':history.id,'plan':output(db,find(db,id,ctx),ctx)}

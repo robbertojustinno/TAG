@@ -6,6 +6,11 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 if __package__:
+    from .audit import record_update
+else:
+    from audit import record_update
+
+if __package__:
     from .models import TaggingHierarchy, utcnow
 else:
     from models import TaggingHierarchy, utcnow
@@ -141,6 +146,7 @@ def build_tagging_router(auth):
                     if changed.rowcount != 1:
                         db.rollback()
                         raise HTTPException(409, 'Conflito de edição. Recarregue os dados.')
+                    record_update(db, context, 'tagging_hierarchies', context.company_id, old, state)
                 db.commit()
             except IntegrityError:
                 db.rollback()
