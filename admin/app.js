@@ -1800,8 +1800,8 @@ function renderAudit() {
   app.innerHTML = tcH`<section class="screen"><div class="card panel">
     <div class="inline-actions"><h2>Auditoria</h2><button type="button" class="outline-button" data-audit-back>Voltar</button></div>
     <form id="auditFilters" class="grid-2">
-      <label>Empresa (ID)<input class="input" type="number" min="1" name="target_company_id"></label>
-      <label>Usuário (ID)<input class="input" type="number" min="1" name="actor_id"></label>
+      <label>Empresa<select class="input" name="target_company_id" disabled><option value="">Todas</option></select></label>
+      <label>Usuário<select class="input" name="actor_id" disabled><option value="">Todos</option></select></label>
       <label>Registro<select class="input" name="entity"><option value="">Todos</option>
         ${Object.entries(auditEntities).map(([key, label]) => tcH`<option value="${key}">${label}</option>`).join('')}</select></label>
       <label>Ação<select class="input" name="action"><option value="">Todas</option>
@@ -1811,6 +1811,7 @@ function renderAudit() {
       <label>Até<input class="input" type="datetime-local" name="end"></label>
       <button class="primary-button">Filtrar</button>
     </form>
+    <p data-audit-names role="status"></p>
     <p data-audit-status role="status"></p>
     <div data-audit-results></div>
     <button type="button" class="outline-button" data-audit-more hidden>Mais registros</button>
@@ -1820,6 +1821,29 @@ function renderAudit() {
   const results = app.querySelector('[data-audit-results]');
   const status = app.querySelector('[data-audit-status]');
   const more = app.querySelector('[data-audit-more]');
+  const companyNames = new Map();
+  const userNames = new Map();
+  const nameStatus = app.querySelector('[data-audit-names]');
+  async function loadNames() {
+    nameStatus.textContent = tcL('Carregando empresas e usuários...');
+    const directories = [
+      ['/companies', form.elements.target_company_id, companyNames, item => item.name],
+      ['/users', form.elements.actor_id, userNames, item => [item.name, item.email].filter(Boolean).join(' — ')],
+    ];
+    const outcomes = await Promise.allSettled(directories.map(async ([path, select, names, label]) => {
+      const items = await companyRequest(path);
+      for (const item of items) names.set(item.id, label(item) || '#' + item.id);
+      const options = [...names].sort((a, b) => a[1].localeCompare(b[1], window.TAGCHECK_I18N.locale) || a[0] - b[0]);
+      const duplicates = new Set(options.filter((entry, i) => entry[1] === options[i - 1]?.[1] || entry[1] === options[i + 1]?.[1]).map(entry => entry[1]));
+      for (const [id, name] of options) {
+        select.add(new Option(duplicates.has(name) ? name + ' (#' + id + ')' : name, id));
+      }
+      select.disabled = false;
+    }));
+    nameStatus.textContent = outcomes.some(outcome => outcome.status === 'rejected')
+      ? tcL('Não foi possível carregar todos os nomes. Reabra a Auditoria para tentar novamente.')
+      : '';
+  }
   let filters = new URLSearchParams();
   let cursor;
   let requestNumber = 0;
@@ -1833,13 +1857,13 @@ function renderAudit() {
       const rows = await companyRequest('/superadmin/audit?' + query);
       if (current !== requestNumber) return;
       const markup = rows.map(row => {
-        const actor = row.actor_email || (row.actor_id ? String(row.actor_id) : tcL('Sistema ou origem sem identificação'));
+        const actor = userNames.get(row.actor_id) || row.actor_email || (row.actor_id ? String(row.actor_id) : tcL('Sistema ou origem sem identificação'));
         const values = Object.entries(row.changes).map(([key, value]) =>
           tcH`<dt>${escapeHtml(key)}</dt><dd><pre style="white-space:pre-wrap;overflow-wrap:anywhere">${escapeHtml(value.redacted ? tcL('Alteração protegida') : JSON.stringify(value, null, 2))}</pre></dd>`).join('');
         const action = {create: 'Criação', update: 'Alteração', delete: 'Exclusão'}[row.action] || row.action;
         return tcH`<details class="audit-entry"><summary>
           ${escapeHtml(new Date(row.occurred_at).toLocaleString(window.TAGCHECK_I18N.locale))} ·
-          ${escapeHtml(actor)} · ${tcL('Empresa')} ${escapeHtml(row.company_id)} ·
+          ${escapeHtml(actor)} · ${tcL('Empresa')} ${escapeHtml(companyNames.get(row.company_id) || row.company_id)} ·
           ${escapeHtml(tcL(action))} · ${escapeHtml(tcL(auditEntities[row.entity] || row.entity))} #${escapeHtml(row.entity_id)}
         </summary><dl>${values}</dl></details>`;
       }).join('');
@@ -1861,7 +1885,7 @@ function renderAudit() {
     load();
   });
   more.addEventListener('click', () => load(true));
-  load();
+  loadNames().then(() => { if (form.isConnected && !requestNumber) load(); });
 }
 
 const auditEntities = {
